@@ -11,13 +11,9 @@ import type {
 } from "./types.js";
 
 export class ScraperService {
-  constructor(
-    private readonly studio: ScraperStudio = new ScraperStudio(),
-  ) {}
+  constructor(private readonly studio: ScraperStudio = new ScraperStudio()) {}
 
-  async createCollector(
-    request: CreateCollectorRequest,
-  ): Promise<Collector> {
+  async createCollector(request: CreateCollectorRequest): Promise<Collector> {
     this.validateTarget(request.target);
     this.validateSchema(request.schema);
 
@@ -30,15 +26,10 @@ export class ScraperService {
   ): Promise<AiFlowTriggerResult> {
     this.validateTarget(target);
 
-    return this.studio.triggerAiFlow(
-      collectorId,
-      target,
-    );
+    return this.studio.triggerAiFlow(collectorId, target);
   }
 
-  async getAiFlowProgress(
-    collectorId: string,
-  ): Promise<AiFlowProgress> {
+  async getAiFlowProgress(collectorId: string): Promise<AiFlowProgress> {
     return this.studio.getAiFlowProgress(collectorId);
   }
 
@@ -51,71 +42,46 @@ export class ScraperService {
     }
 
     if (!targetUrl.trim()) {
-      throw new Error(
-        "Scraper target URL is required.",
-      );
+      throw new Error("Scraper target URL is required.");
     }
 
-    return this.studio.triggerCollector(
-      { collectorId },
-      targetUrl,
-    );
+    return this.studio.triggerCollector({ collectorId }, targetUrl);
   }
 
-  async getDataset(
-    collectionId: string,
-  ): Promise<CollectorResult> {
+  async getDataset(collectionId: string): Promise<CollectorResult> {
     return this.studio.getDataset(collectionId);
   }
 
-  private validateTarget(
-    target: ScraperTarget,
-  ): void {
+  private validateTarget(target: ScraperTarget): void {
     if (!target.url.trim()) {
-      throw new Error(
-        "Scraper target URL is required.",
-      );
+      throw new Error("Scraper target URL is required.");
     }
 
     if (!target.title.trim()) {
-      throw new Error(
-        "Scraper target title is required.",
-      );
+      throw new Error("Scraper target title is required.");
     }
 
     if (target.instructions.length === 0) {
-      throw new Error(
-        "At least one scraper instruction is required.",
-      );
+      throw new Error("At least one scraper instruction is required.");
     }
 
     if (target.evidenceRequirements.length === 0) {
-      throw new Error(
-        "At least one evidence requirement is required.",
-      );
+      throw new Error("At least one evidence requirement is required.");
     }
   }
 
-  private validateSchema(
-    schema: ScraperSchema,
-  ): void {
+  private validateSchema(schema: ScraperSchema): void {
     if (!schema.name.trim()) {
-      throw new Error(
-        "Scraper schema name is required.",
-      );
+      throw new Error("Scraper schema name is required.");
     }
 
     if (schema.fields.length === 0) {
-      throw new Error(
-        "Scraper schema must contain at least one field.",
-      );
+      throw new Error("Scraper schema must contain at least one field.");
     }
 
     for (const field of schema.fields) {
       if (!field.name.trim()) {
-        throw new Error(
-          "Every scraper field must have a name.",
-        );
+        throw new Error("Every scraper field must have a name.");
       }
 
       if (!field.description.trim()) {
@@ -124,10 +90,6 @@ export class ScraperService {
         );
       }
     }
-  }
-
-  async close(): Promise<void> {
-    await this.studio.close?.();
   }
 }
 

@@ -1,10 +1,10 @@
 import { GoogleGenAI } from "@google/genai";
-import { buildReasoningPrompt } from "../prompts.ts";
+import { buildReasoningPrompt } from "../prompts.js";
 import {
   REASONING_SYSTEM_PROMPT,
   REASONING_RESPONSE_SCHEMA,
-} from "../prompts.ts";
-import { LLMService } from "../service.ts";
+} from "../prompts.js";
+import { LLMService } from "../service.js";
 
 import type {
   LLMProvider,

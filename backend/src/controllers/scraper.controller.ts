@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-
+import { Prisma } from "../generated/prisma/client.js";
 import {
   findScraperByCollectorId,
   updateScraperState,
@@ -10,8 +10,7 @@ export async function scraperWebhook(
   res: Response,
 ): Promise<void> {
   try {
-    const payload =
-      req.body as Record<string, unknown>;
+    const payload = req.body as Record<string, unknown>;
 
     console.log(
       "Bright Data webhook received:",
@@ -27,21 +26,16 @@ export async function scraperWebhook(
 
     if (!collectorId) {
       res.status(400).json({
-        error:
-          "collector_id missing from webhook payload",
+        error: "collector_id missing from webhook payload",
       });
       return;
     }
 
-    const scraper =
-      await findScraperByCollectorId(
-        collectorId,
-      );
+    const scraper = await findScraperByCollectorId(collectorId);
 
     if (!scraper) {
       res.status(404).json({
-        error:
-          "No scraper registered for collector",
+        error: "No scraper registered for collector",
       });
       return;
     }
@@ -49,23 +43,17 @@ export async function scraperWebhook(
     /**
      * Bright Data webhook is the completion signal.
      */
-    await updateScraperState(
-      scraper.watchId,
-      {
-        status: "COMPLETED",
-        latestData: payload,
-        lastRunAt: new Date(),
-      },
-    );
+    await updateScraperState(scraper.watchId, {
+      status: "COMPLETED",
+      latestData: payload as Prisma.InputJsonValue,
+      lastRunAt: new Date(),
+    });
 
     res.status(200).json({
       received: true,
     });
   } catch (error) {
-    console.error(
-      "Failed to process Bright Data webhook:",
-      error,
-    );
+    console.error("Failed to process Bright Data webhook:", error);
 
     res.status(500).json({
       error: "Failed to process webhook",
