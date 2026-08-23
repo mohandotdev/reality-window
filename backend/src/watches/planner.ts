@@ -1,6 +1,8 @@
 import type { CreateWatchRequest, WatchPlan } from "./types.js";
 import { searchGoogleSources } from "../brightdata/serp.js";
 import { createLlmService } from "../llm/service.js";
+import { createScenarioHash } from "../perisistence/scenario-hash.js";
+import { findWatchByScenarioHash } from "../perisistence/watch-repository.js";
 
 export async function createWatchPlan(
   request: CreateWatchRequest,

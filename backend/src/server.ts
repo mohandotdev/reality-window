@@ -4,6 +4,7 @@ import cors from "cors";
 import express from "express";
 
 import watchRouter from "./routes/watches.js";
+import scraperRoutes from "./routes/scraper.js";
 
 const app = express();
 
@@ -20,6 +21,8 @@ app.get("/health", (_req, res) => {
 });
 
 app.use("/api/watches", watchRouter);
+
+app.use("/api/scraper", scraperRoutes);
 
 app.listen(PORT, () => {
   console.log(`Reality Window API running on http://localhost:${PORT}`);

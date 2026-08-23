@@ -1,0 +1,58 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model Watch {
+  id            String   @id @default(cuid())
+  subject       String
+  assumption    String
+
+  scenarioHash  String   @unique
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  scraper       WatchScraper?
+}
+
+model WatchScraper {
+  id             String   @id @default(cuid())
+  watchId        String   @unique
+
+  collectorId    String?  @unique
+  aiJobId        String?
+  collectionId   String?
+
+  status         ScraperStatus @default(PENDING)
+
+  target         Json
+  schema         Json?
+  sampleData     Json?
+  latestData     Json?
+
+  approvedAt     DateTime?
+  lastRunAt      DateTime?
+
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  watch          Watch @relation(fields: [watchId], references: [id], onDelete: Cascade)
+}
+
+enum ScraperStatus {
+  PENDING
+  CREATING
+  AI_FLOW_RUNNING
+  REVIEW_REQUIRED
+  APPROVED
+  READY
+  RUNNING
+  COMPLETED
+  FAILED
+  UNAVAILABLE
+}
