@@ -3,189 +3,224 @@ import type {
   AiFlowTriggerResult,
   Collector,
   CollectorResult,
-  CollectorTriggerResult,
   CreateCollectorRequest,
   RunCollectorRequest,
+  ScraperGenerationResult,
+  ScraperSchema,
   ScraperTarget,
 } from "./types.js";
 
 interface BrightDataCollectorResponse {
-  id: string;
+  id?: string;
+  collectorId?: string;
   name?: string;
-  active?: boolean;
+  status?: string;
+  [key: string]: unknown;
 }
 
 interface BrightDataAiFlowResponse {
-  id: string;
-  queued: boolean;
+  id?: string;
+  jobId?: string;
+  queued?: boolean;
+  [key: string]: unknown;
+}
+
+interface BrightDataAiFlowProgress {
+  step?: string;
+  completed_steps?: string[];
+  status?: string;
+  schema?: unknown;
+  sampleData?: unknown;
+  [key: string]: unknown;
 }
 
 interface BrightDataTriggerResponse {
-  collection_id: string;
+  response_id?: string;
+  collection_id?: string;
+  collectionId?: string;
+  status?: string;
+  [key: string]: unknown;
 }
 
-/**
- * Low-level Bright Data Scraper Studio adapter.
- *
- * Bright Data workflow:
- *
- * POST /dca/collector
- *        ↓
- * POST /dca/collectors/{collector_id}/automate_template
- *        ↓
- * GET /dca/collectors/{collector_id}/automate_template/progress
- *        ↓
- * POST /dca/trigger
- *        ↓
- * GET /dca/dataset
- */
+export interface TriggerCollectorResult {
+  collectorId: string;
+  collectionId: string;
+  status?: string;
+  raw: BrightDataTriggerResponse;
+}
+
 export class ScraperStudio {
   private readonly apiKey: string;
   private readonly baseUrl = "https://api.brightdata.com";
 
-  constructor(apiKey = process.env["BRIGHTDATA_API_KEY"] ?? "") {
-    if (!apiKey.trim()) {
-      throw new Error("BRIGHTDATA_API_KEY is missing.");
+  constructor(apiKey = process.env["BRIGHT_DATA_API_KEY"]) {
+    if (!apiKey?.trim()) {
+      throw new Error("BRIGHT_DATA_API_KEY is missing.");
     }
 
     this.apiKey = apiKey.trim();
   }
 
-  /**
-   * Create the Scraper Studio collector/template entity.
-   */
-  async createCollector(request: CreateCollectorRequest): Promise<Collector> {
-    const name = request.schema.name.trim();
-    const targetUrl = request.target.url.trim();
+  generateScraperProposal(
+    target: ScraperTarget,
+    schema: ScraperSchema,
+  ): ScraperGenerationResult {
+    return {
+      target,
+      schema,
+      collectorId: "",
+      aiJobId: "",
+      status: "PENDING",
+    };
+  }
 
-    if (!name) {
-      throw new Error("Scraper collector name is required.");
-    }
+  async createCollector(request: CreateCollectorRequest): Promise<Collector> {
+    const targetUrl = request.target.url.trim();
 
     if (!targetUrl) {
       throw new Error("Scraper target URL is required.");
+    }
+
+    const collectorName = this.buildCollectorName(request.target);
+
+    const webhookUrl = process.env["BRIGHT_DATA_WEBHOOK_URL"]?.trim();
+
+    if (!webhookUrl) {
+      throw new Error("BRIGHT_DATA_WEBHOOK_URL is missing.");
     }
 
     const response = await this.request<BrightDataCollectorResponse>(
       "/dca/collector",
       {
         method: "POST",
-        body: JSON.stringify({
-          name,
-        }),
+        body: {
+          name: collectorName,
+
+          deliver: {
+            type: "webhook",
+
+            filename: {
+              template: `${collectorName}-{timestamp}`,
+              extension: "json",
+              tz_offset: "+00:00",
+            },
+
+            endpoint: webhookUrl,
+
+            flatten_csv: false,
+
+            delivery_type: "deliver_results",
+          },
+        },
       },
     );
 
-    if (!response.id) {
-      throw new Error("Bright Data did not return a collector ID.");
+    const collectorId = response.id ?? response.collectorId;
+
+    if (!collectorId) {
+      throw new Error(
+        "Bright Data collector creation succeeded but no collector ID was returned.",
+      );
     }
 
     return {
-      collectorId: response.id,
-      name: response.name ?? name,
+      collectorId,
+      name: response.name ?? collectorName,
       url: targetUrl,
-      status: "CREATED",
+      status: this.normalizeCollectorStatus(response.status),
     };
   }
 
-  /**
-   * Start Bright Data AI Flow.
-   *
-   * This generates the scraper implementation/schema.
-   *
-   * It does NOT mean Reality Window has approved the scraper.
-   */
   async triggerAiFlow(
     collectorId: string,
     target: ScraperTarget,
   ): Promise<AiFlowTriggerResult> {
     const id = collectorId.trim();
-    const url = target.url.trim();
 
     if (!id) {
       throw new Error("Collector ID is required.");
     }
 
-    if (!url) {
+    const targetUrl = target.url.trim();
+
+    if (!targetUrl) {
       throw new Error("Scraper target URL is required.");
     }
 
-    const description = [
-      target.title,
-      ...target.instructions,
-      ...target.evidenceRequirements.map(
-        (requirement) => `Evidence requirement: ${requirement}`,
-      ),
-    ]
-      .filter(Boolean)
-      .join("\n")
-      .slice(0, 500);
+    const description =
+      target.instructions
+        ?.map((instruction) => instruction.trim())
+        .filter(Boolean)
+        .join(". ") ||
+      target.title?.trim() ||
+      "Extract relevant structured information from the target page.";
+
+    if (!description) {
+      throw new Error("AI Flow description is required.");
+    }
 
     const response = await this.request<BrightDataAiFlowResponse>(
       `/dca/collectors/${encodeURIComponent(id)}/automate_template`,
       {
         method: "POST",
-        body: JSON.stringify({
+
+        // IMPORTANT:
+        // Do NOT JSON.stringify here.
+        // request() handles JSON serialization.
+        body: {
           description,
-          urls: [url],
-        }),
+          urls: [targetUrl],
+        },
       },
     );
 
-    if (!response.id) {
-      throw new Error("Bright Data did not return an AI Flow job ID.");
+    const jobId = response.id ?? response.jobId;
+
+    if (!jobId) {
+      throw new Error(
+        "Bright Data AI Flow was triggered but no AI job ID was returned.",
+      );
     }
 
     return {
-      jobId: response.id,
-      queued: response.queued,
+      jobId,
+      queued: response.queued ?? false,
     };
   }
 
-  /**
-   * Poll Bright Data AI Flow progress.
-   */
   async getAiFlowProgress(collectorId: string): Promise<AiFlowProgress> {
     const id = collectorId.trim();
 
     if (!id) {
-      throw new Error("Collector ID is required.");
+      throw new Error("AI job ID is required.");
     }
 
-    const response = await this.request<Record<string, unknown>>(
-      `/dca/collectors/${encodeURIComponent(id)}/automate_template/progress`,
+    const response = await this.request<BrightDataAiFlowProgress>(
+      `/dca/collectors/${collectorId}/automate_template/progress`,
       {
         method: "GET",
       },
     );
 
     return {
-      ...response,
+      jobId: id,
 
-      status: typeof response.status === "string" ? response.status : "unknown",
+      step: response.step,
 
-      ...(typeof response.step === "string" ? { step: response.step } : {}),
+      completedSteps: response.completed_steps ?? [],
 
-      ...(Array.isArray(response.completed_steps)
-        ? {
-            completedSteps: response.completed_steps.filter(
-              (item): item is string => typeof item === "string",
-            ),
-          }
-        : {}),
+      status: response.status ?? "unknown",
+
+      schema: this.normalizeSchema(response.schema),
+
+      sampleData: this.normalizeSampleData(response.sampleData),
     };
   }
 
-  /**
-   * Trigger an already-created/approved collector.
-   *
-   * Reality Window must enforce its own APPROVED state
-   * before calling this method.
-   */
   async triggerCollector(
     request: RunCollectorRequest,
     url: string,
-  ): Promise<CollectorTriggerResult> {
+  ): Promise<TriggerCollectorResult> {
     const collectorId = request.collectorId.trim();
     const targetUrl = url.trim();
 
@@ -198,29 +233,34 @@ export class ScraperStudio {
     }
 
     const response = await this.request<BrightDataTriggerResponse>(
-      `/dca/trigger?collector=${encodeURIComponent(collectorId)}&queue_next=1`,
+      `/dca/trigger?collector=${encodeURIComponent(collectorId)}`,
       {
         method: "POST",
-        body: JSON.stringify([
+        body: [
           {
             url: targetUrl,
           },
-        ]),
+        ],
       },
     );
 
-    if (!response.collection_id) {
-      throw new Error("Bright Data did not return a collection ID.");
+    const collectionId =
+      response.collection_id ?? response.collectionId ?? response.response_id;
+
+    if (!collectionId) {
+      throw new Error(
+        "Bright Data collector was triggered but no collection ID was returned.",
+      );
     }
 
     return {
-      collectionId: response.collection_id,
+      collectorId,
+      collectionId,
+      status: response.status,
+      raw: response,
     };
   }
 
-  /**
-   * Retrieve the result of a collector execution.
-   */
   async getDataset(collectionId: string): Promise<CollectorResult> {
     const id = collectionId.trim();
 
@@ -228,67 +268,200 @@ export class ScraperStudio {
       throw new Error("Collection ID is required.");
     }
 
-    const response = await this.request<unknown>(
-      `/dca/dataset?id=${encodeURIComponent(id)}`,
-      {
-        method: "GET",
-      },
-    );
+    const response = await this.request<unknown>("/dca/dataset", {
+      method: "GET",
 
-    return this.normalizeCollectorResult(id, response);
+      query: {
+        collection_id: id,
+      },
+    });
+
+    return {
+      collectorId: id,
+
+      status: "COMPLETED",
+
+      data: this.normalizeDataset(response),
+
+      collectedAt: new Date().toISOString(),
+    };
   }
 
-  private async request<T>(path: string, options: RequestInit): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      ...options,
+  async runCollector(
+    request: RunCollectorRequest,
+    url: string,
+  ): Promise<CollectorResult> {
+    const result = await this.triggerCollector(request, url);
+
+    return this.getDataset(result.collectionId);
+  }
+
+  async close(): Promise<void> {
+    return;
+  }
+
+  /**
+   * Creates a short, identifiable Bright Data scraper name.
+   *
+   * Example:
+   *
+   * "Houston adopts first-ever short-term rental regulations"
+   * ->
+   * "rw-houston-str-rules"
+   */
+  private buildCollectorName(target: ScraperTarget): string {
+    const source = target.title?.trim() || new URL(target.url).hostname;
+
+    let name = source.toLowerCase();
+
+    name = name
+      .replace(/\bshort[- ]term rental(s)?\b/g, "str")
+      .replace(/\bregulation(s)?\b/g, "rules")
+      .replace(/\bregulatory\b/g, "rules")
+      .replace(/\bfirst[- ]ever\b/g, "")
+      .replace(/\badopts?\b/g, "")
+      .replace(/\bnew\b/g, "")
+      .replace(/[^a-z0-9]+/g, "-")
+      .replace(/-+/g, "-")
+      .replace(/^-|-$/g, "");
+
+    if (!name) {
+      name = "scraper";
+    }
+
+    /*
+     * Keep names short enough to remain readable
+     * in Scraper Studio.
+     */
+    name = name.slice(0, 42);
+
+    name = name.replace(/-+$/, "");
+
+    return `rw-${name}`;
+  }
+
+  private normalizeSchema(value: unknown): Record<string, unknown> | undefined {
+    if (typeof value !== "object" || value === null || Array.isArray(value)) {
+      return undefined;
+    }
+
+    return value as Record<string, unknown>;
+  }
+
+  private normalizeSampleData(
+    value: unknown,
+  ): Record<string, unknown>[] | undefined {
+    if (!Array.isArray(value)) {
+      return undefined;
+    }
+
+    return value.filter(
+      (item): item is Record<string, unknown> =>
+        typeof item === "object" && item !== null && !Array.isArray(item),
+    );
+  }
+
+  private normalizeDataset(value: unknown): Record<string, unknown>[] {
+    if (Array.isArray(value)) {
+      return value.filter(
+        (item): item is Record<string, unknown> =>
+          typeof item === "object" && item !== null && !Array.isArray(item),
+      );
+    }
+
+    if (typeof value === "object" && value !== null) {
+      const object = value as Record<string, unknown>;
+
+      if (Array.isArray(object.data)) {
+        return this.normalizeDataset(object.data);
+      }
+
+      if (Array.isArray(object.results)) {
+        return this.normalizeDataset(object.results);
+      }
+
+      return [object];
+    }
+
+    return [];
+  }
+
+  private async request<T>(
+    path: string,
+    options: {
+      method: "GET" | "POST";
+      body?: unknown;
+      query?: Record<string, string>;
+    },
+  ): Promise<T> {
+    let url = `${this.baseUrl}${path}`;
+
+    if (options.query) {
+      const searchParams = new URLSearchParams();
+
+      for (const [key, value] of Object.entries(options.query)) {
+        searchParams.set(key, value);
+      }
+
+      url = `${url}?${searchParams.toString()}`;
+    }
+
+    const response = await fetch(url, {
+      method: options.method,
+
       headers: {
         Authorization: `Bearer ${this.apiKey}`,
+
         "Content-Type": "application/json",
-        ...(options.headers ?? {}),
+
+        Accept: "application/json",
       },
+
+      body:
+        options.method === "POST"
+          ? JSON.stringify(options.body ?? {})
+          : undefined,
     });
 
     const text = await response.text();
 
-    if (!response.ok) {
-      throw new Error(
-        `Bright Data request failed: ${response.status} ${response.statusText}${
-          text ? ` - ${text}` : ""
-        }`,
-      );
-    }
-
-    if (!text.trim()) {
-      throw new Error(`Bright Data returned an empty response for ${path}.`);
-    }
+    let payload: unknown;
 
     try {
-      return JSON.parse(text) as T;
+      payload = text ? JSON.parse(text) : {};
     } catch {
-      throw new Error(`Bright Data returned invalid JSON for ${path}.`);
+      payload = text;
     }
+
+    if (!response.ok) {
+      const details =
+        typeof payload === "string" ? payload : JSON.stringify(payload);
+
+      throw new Error(`Bright Data API ${response.status}: ${details}`);
+    }
+
+    return payload as T;
   }
 
-  private normalizeCollectorResult(
-    collectorId: string,
-    data: unknown,
-  ): CollectorResult {
-    const normalizedData: Record<string, unknown>[] = Array.isArray(data)
-      ? data.filter(
-          (item): item is Record<string, unknown> =>
-            typeof item === "object" && item !== null && !Array.isArray(item),
-        )
-      : [
-          typeof data === "object" && data !== null && !Array.isArray(data)
-            ? (data as Record<string, unknown>)
-            : { result: data },
-        ];
+  private normalizeCollectorStatus(status?: string): Collector["status"] {
+    switch (status?.toLowerCase()) {
+      case "running":
+        return "RUNNING";
 
-    return {
-      collectorId,
-      status: "COMPLETED",
-      data: normalizedData,
-      collectedAt: new Date().toISOString(),
-    };
+      case "completed":
+      case "done":
+        return "COMPLETED";
+
+      case "failed":
+      case "error":
+        return "FAILED";
+
+      case "ready":
+      case "active":
+        return "READY";
+
+      default:
+        return "CREATED";
+    }
   }
 }

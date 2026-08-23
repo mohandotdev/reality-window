@@ -15,7 +15,6 @@ export class ScraperService {
 
   async createCollector(request: CreateCollectorRequest): Promise<Collector> {
     this.validateTarget(request.target);
-    this.validateSchema(request.schema);
 
     return this.studio.createCollector(request);
   }
@@ -30,6 +29,10 @@ export class ScraperService {
   }
 
   async getAiFlowProgress(collectorId: string): Promise<AiFlowProgress> {
+    if (!collectorId.trim()) {
+      throw new Error("AI job ID is required.");
+    }
+
     return this.studio.getAiFlowProgress(collectorId);
   }
 
@@ -45,10 +48,27 @@ export class ScraperService {
       throw new Error("Scraper target URL is required.");
     }
 
-    return this.studio.triggerCollector({ collectorId }, targetUrl);
+    const result = await this.studio.triggerCollector(
+      {
+        collectorId,
+      },
+      targetUrl,
+    );
+
+    if (!result.collectionId) {
+      throw new Error("Bright Data did not return a collection ID.");
+    }
+
+    return {
+      collectionId: result.collectionId,
+    };
   }
 
   async getDataset(collectionId: string): Promise<CollectorResult> {
+    if (!collectionId.trim()) {
+      throw new Error("Collection ID is required.");
+    }
+
     return this.studio.getDataset(collectionId);
   }
 

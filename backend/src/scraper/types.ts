@@ -80,15 +80,16 @@ export interface RunCollectorRequest {
 }
 
 export interface AiFlowProgress {
-  status: string;
+  jobId: string;
   step?: string;
-  completedSteps?: string[];
+  completedSteps: string[];
+  status: string;
 
-  schema?: unknown;
-  sampleData?: unknown;
-  template?: unknown;
+  schema?: Record<string, unknown>;
 
-  [key: string]: unknown;
+  sampleData?: Record<string, unknown>[];
+
+  raw?: Record<string, unknown>;
 }
 
 export interface AiFlowTriggerResult {
@@ -107,13 +108,16 @@ export interface CollectorResult {
   collectedAt: string;
 }
 
+/** Successful Bright Data webhook payload. */
+export type BrightDataWebhookRecord = Record<string, unknown>;
+export type BrightDataWebhookPayload = BrightDataWebhookRecord[];
+
 export interface ScraperGenerationResult {
   target: ScraperTarget;
-  schema?: ScraperSchema;
-  collectorId: string;
-  aiJobId: string;
-  sampleData?: Record<string, unknown>[];
-  status: ScraperStatus;
+  schema: ScraperSchema;
+  collectorId?: string;
+  aiJobId?: string;
+  status?: string;
 }
 
 export interface ScraperState {

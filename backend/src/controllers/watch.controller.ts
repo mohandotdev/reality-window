@@ -84,11 +84,7 @@ export async function createWatch(req: Request, res: Response): Promise<void> {
       assumption,
     });
 
-    const watch = await createWatchRecord({
-      subject,
-      assumption,
-      scenarioHash,
-    });
+    const watch = await createWatchRecord(plan, scenarioHash);
 
     res.status(201).json({
       watchId: watch.id,
@@ -144,7 +140,8 @@ export async function createWatchScraper(
       return;
     }
 
-    if (watch.scraper) {
+    // Reuse existing scraper if one already exists.
+    if (watch.scraper && watch.scraper.status !== "FAILED") {
       res.status(200).json({
         scraper: watch.scraper,
         reused: true,
@@ -153,26 +150,60 @@ export async function createWatchScraper(
       return;
     }
 
-    const body = req.body as Partial<CreateWatchScraperBody>;
+    /*
+     * The watch created in Phase 1 contains the planning information.
+     *
+     * The scraper endpoint should therefore derive the initial target
+     * from that plan instead of requiring the frontend to submit
+     * target/schema manually.
+     */
 
-    if (!body.target) {
+    const sources = Array.isArray(watch.sources) ? watch.sources : [];
+
+    if (sources.length === 0) {
       res.status(400).json({
-        error: "target is required",
+        error: "No sources available for this watch",
       });
       return;
     }
 
-    if (!body.schema) {
+    const primarySource = sources[0];
+
+    if (
+      typeof primarySource !== "object" ||
+      primarySource === null ||
+      !("url" in primarySource) ||
+      typeof primarySource.url !== "string"
+    ) {
       res.status(400).json({
-        error: "schema is required",
+        error: "Primary source URL is missing",
       });
       return;
     }
 
-    const target = body.target;
+    const title =
+      "title" in primarySource && typeof primarySource.title === "string"
+        ? primarySource.title
+        : watch.subject;
 
-    const scraperSchema = body.schema;
+    const evidenceRequirements = Array.isArray(watch.evidenceRequirements)
+      ? watch.evidenceRequirements.filter(
+          (value): value is string => typeof value === "string",
+        )
+      : [];
 
+    const target: ScraperTarget = {
+      url: primarySource.url,
+      title,
+      instructions: [watch.assumption, ...evidenceRequirements],
+      evidenceRequirements,
+    };
+
+    /*
+     * Schema generation is handled by Bright Data AI Flow.
+     *
+     * We don't need to invent a schema here.
+     */
     const scraper = await createWatchScraperRecord({
       watchId,
       target,
@@ -180,15 +211,35 @@ export async function createWatchScraper(
     });
 
     try {
+      // ----------------------------------------
+      // 1. Create Bright Data collector
+      // ----------------------------------------
+
       const collector = await scraperService.createCollector({
         target,
-        schema: scraperSchema,
+        schema: {
+          name: target.title,
+          description: [watch.assumption, ...evidenceRequirements].join(". "),
+          fields: [
+            {
+              name: "data",
+              type: "object",
+              description:
+                "Extract the structured information relevant to the requested evidence and changes.",
+              required: true,
+            },
+          ],
+        },
       });
 
       await updateScraperState(watchId, {
         collectorId: collector.collectorId,
         status: "AI_FLOW_RUNNING",
       });
+
+      // ----------------------------------------
+      // 2. Trigger Bright Data AI Flow
+      // ----------------------------------------
 
       const aiFlow = await scraperService.triggerAiFlow(
         collector.collectorId,
@@ -200,10 +251,15 @@ export async function createWatchScraper(
         status: "AI_FLOW_RUNNING",
       });
 
+      // ----------------------------------------
+      // 3. Return current scraper state
+      // ----------------------------------------
+
       const updated = await findWatchById(watchId);
 
       res.status(201).json({
         scraper: updated?.scraper,
+        reused: false,
       });
     } catch (error) {
       await updateScraperState(watchId, {
@@ -266,6 +322,7 @@ export async function getWatchScraperProgress(
 
   try {
     watchId = getRouteParam(req.params.watchId, "watchId");
+    console.log({ watchId });
   } catch {
     res.status(400).json({
       error: "watchId is required",
@@ -292,22 +349,32 @@ export async function getWatchScraperProgress(
       return;
     }
 
+    if (!scraper.aiJobId) {
+      res.status(409).json({
+        error: "AI Flow job has not been created yet",
+      });
+      return;
+    }
+
     const progress = await scraperService.getAiFlowProgress(
       scraper.collectorId,
     );
 
     const status = progress.status.toLowerCase();
 
+    console.log({ status });
+
     if (status === "done" || status === "completed") {
       await updateScraperState(watchId, {
-        status: "REVIEW_REQUIRED",
+        status: "READY",
         schema:
-          typeof progress.schema === "object" &&
-          progress.schema !== null &&
-          !Array.isArray(progress.schema)
-            ? progress.schema
+          progress.schema !== undefined
+            ? (progress.schema as unknown as Prisma.InputJsonValue)
             : undefined,
-        sampleData: progress.sampleData ?? undefined,
+        sampleData:
+          progress.sampleData !== undefined
+            ? (progress.sampleData as unknown as Prisma.InputJsonValue)
+            : undefined,
       });
     }
 
@@ -435,7 +502,7 @@ export async function runWatchScraper(
       return;
     }
 
-    if (scraper.status !== "APPROVED" && scraper.status !== "COMPLETED") {
+    if (scraper.status == "APPROVED" || scraper.status == "COMPLETED") {
       res.status(409).json({
         error: `Scraper cannot run from status ${scraper.status}`,
       });

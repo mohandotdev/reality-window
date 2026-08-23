@@ -1,4 +1,5 @@
 import crypto from "node:crypto";
+import { Prisma } from "../generated/prisma/client.js";
 
 import { prisma } from "../perisistence/client.js";
 import type { WatchPlan } from "./types.js";
@@ -44,21 +45,19 @@ export async function findWatchById(watchId: string) {
   });
 }
 
-/**
- * The planning result is returned to the client but is not
- * persisted on Watch because the Prisma model does not have
- * a plan column.
- */
-export async function createWatchRecord(data: {
-  subject: string;
-  assumption: string;
-  scenarioHash: string;
-}) {
+export async function createWatchRecord(plan: WatchPlan, scenarioHash: string) {
   return prisma.watch.create({
     data: {
-      subject: data.subject,
-      assumption: data.assumption,
-      scenarioHash: data.scenarioHash,
+      subject: plan.subject,
+      assumption: plan.assumption,
+      scenarioHash,
+
+      searchQueries: plan.searchQueries as unknown as Prisma.InputJsonValue,
+
+      sources: plan.sources as unknown as Prisma.InputJsonValue,
+
+      evidenceRequirements:
+        plan.evidenceRequirements as unknown as Prisma.InputJsonValue,
     },
     include: {
       scraper: true,
@@ -86,6 +85,24 @@ export async function findScraperByCollectorId(collectorId: string) {
       collectorId,
     },
   });
+}
+
+/**
+ * Bright Data's webhook result currently echoes the input URL but does not
+ * include collector_id in the scraped records. Use the target URL as a
+ * fallback correlation key when collector_id is unavailable.
+ */
+export async function findScraperByTargetUrl(targetUrl: string) {
+  const scrapers = await prisma.watchScraper.findMany({
+    where: {
+      target: {
+        path: ["url"],
+        equals: targetUrl,
+      },
+    },
+  });
+
+  return scrapers[0] ?? null;
 }
 
 type WatchScraperUpdateData = Parameters<
