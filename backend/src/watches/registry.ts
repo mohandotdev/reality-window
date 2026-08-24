@@ -4,6 +4,13 @@ import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../perisistence/client.js";
 import type { WatchPlan } from "./types.js";
 
+import {
+  createWatchRecord as createWatchRecordRepository,
+  findAllWatches as findAllWatchesRepository,
+  findWatchById as findWatchByIdRepository,
+  findWatchByScenarioHash as findWatchByScenarioHashRepository,
+} from "../perisistence/watch-repository.js";
+
 export function createScenarioHash(
   subject: string,
   assumption: string,
@@ -45,10 +52,7 @@ export async function findWatchById(watchId: string) {
   });
 }
 
-export async function createWatchRecord(
-  plan: WatchPlan,
-  scenarioHash: string,
-) {
+export async function createWatchRecord(plan: WatchPlan, scenarioHash: string) {
   return prisma.watch.create({
     data: {
       subject: plan.subject,
@@ -71,9 +75,7 @@ export async function createWatchRecord(
 export async function createWatchScraperRecord(data: {
   watchId: string;
   target: object;
-  status?: Parameters<
-    typeof prisma.watchScraper.create
-  >[0]["data"]["status"];
+  status?: Parameters<typeof prisma.watchScraper.create>[0]["data"]["status"];
 }) {
   return prisma.watchScraper.create({
     data: {
@@ -146,4 +148,8 @@ export async function findScraperEvaluations(scraperId: string) {
       createdAt: "desc",
     },
   });
+}
+
+export async function findAllWatches() {
+  return findAllWatchesRepository();
 }

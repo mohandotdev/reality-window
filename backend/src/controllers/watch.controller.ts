@@ -17,6 +17,7 @@ import { createScenarioHash } from "../perisistence/scenario-hash.js";
 import {
   createWatchRecord,
   createWatchScraperRecord,
+  findAllWatches,
   findLatestScraperEvaluation,
   findScraperByCollectorId,
   findScraperEvaluations,
@@ -751,6 +752,43 @@ export async function evaluateWatchScraper(
 
     res.status(500).json({
       error: "Failed to evaluate scraper",
+    });
+  }
+}
+
+export async function getWatches(_req: Request, res: Response): Promise<void> {
+  try {
+    const watches = await findAllWatches();
+
+    res.status(200).json({
+      watches: watches.map((watch) => {
+        const latest = watch.scraper?.evaluations[0];
+
+        return {
+          id: watch.id,
+          subject: watch.subject,
+          assumption: watch.assumption,
+          scraperStatus: watch.scraper?.status ?? null,
+          collectionId: watch.scraper?.collectionId ?? null,
+          approvedAt: watch.scraper?.approvedAt ?? null,
+          lastScraperUpdateAt: watch.scraper?.updatedAt ?? null,
+          latestEvaluation: latest
+            ? {
+                verdict: latest.verdict,
+                createdAt: latest.createdAt,
+                confidence: latest.confidence,
+              }
+            : null,
+          createdAt: watch.createdAt,
+          updatedAt: watch.updatedAt,
+        };
+      }),
+    });
+  } catch (error) {
+    console.error("Failed to get watches:", error);
+
+    res.status(500).json({
+      error: "Failed to get watches",
     });
   }
 }

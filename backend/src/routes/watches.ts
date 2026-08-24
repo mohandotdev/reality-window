@@ -10,6 +10,7 @@ import {
   getWatchScraper,
   getWatchScraperDataset,
   getWatchScraperProgress,
+  getWatches,
   runWatchScraper,
 } from "../controllers/watch.controller.js";
 
@@ -23,6 +24,8 @@ router.post("/", createWatch);
 /**
  * Watch state / evaluation.
  */
+router.get("/", getWatches);
+
 router.get("/:watchId", getWatch);
 
 router.post("/:watchId/evaluate", evaluateWatchScraper);

@@ -51,3 +51,38 @@ export async function findWatchById(watchId: string) {
     },
   });
 }
+
+export async function findAllWatches() {
+  return prisma.watch.findMany({
+    orderBy: {
+      updatedAt: "desc",
+    },
+    select: {
+      id: true,
+      subject: true,
+      assumption: true,
+      createdAt: true,
+      updatedAt: true,
+      scraper: {
+        select: {
+          status: true,
+          collectionId: true,
+          approvedAt: true,
+          lastRunAt: true,
+          updatedAt: true,
+          evaluations: {
+            orderBy: {
+              createdAt: "desc",
+            },
+            take: 1,
+            select: {
+              verdict: true,
+              createdAt: true,
+              confidence: true,
+            },
+          },
+        },
+      },
+    },
+  });
+}
