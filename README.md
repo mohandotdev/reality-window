@@ -34,6 +34,39 @@ Reality Window tracks a belief instead of a URL. You give it a subject, an assum
 
 ---
 
+## How We Use Bright Data Scraper Studio
+
+Bright Data Scraper Studio is the acquisition layer at the core of Reality Window.
+
+We don't use Scraper Studio simply to scrape a page and display its contents. A user's watch is first translated into a specific evidence requirement, and that requirement is used to create a purpose-specific collector through Scraper Studio's AI Flow.
+
+The flow is:
+
+1. **Watch → evidence requirement**
+   - The user defines a subject, an assumption, and what evidence could invalidate it.
+
+2. **Evidence requirement → collector**
+   - Reality Window sends the source and extraction requirements to Bright Data Scraper Studio AI Flow.
+   - AI Flow generates the collector instead of us maintaining site-specific selectors in our application.
+
+3. **Collector → approved acquisition**
+   - The generated collector and its AI job state are persisted with the watch.
+   - The user can review and approve the generated collector before execution.
+
+4. **Collector → structured observation**
+   - Reality Window triggers the approved collector.
+   - Bright Data runs the collection asynchronously and sends the completed result through its webhook.
+
+5. **Observation → reasoning**
+   - The structured dataset returned by Bright Data becomes the evidence consumed by our evaluation layer.
+   - The LLM evaluates that evidence against the original assumption and produces a typed decision, reasoning, evidence, and changed fields.
+
+This makes Bright Data a core part of the product's reasoning loop:
+
+**Assumption → Evidence Requirement → AI-Generated Collector → Bright Data Observation → Evaluation → Finding**
+
+## Without the Scraper Studio acquisition layer, Reality Window has no fresh external evidence to evaluate.
+
 ## How it works
 
 ```mermaid
