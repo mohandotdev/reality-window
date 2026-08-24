@@ -23,6 +23,8 @@ import {
   updateScraperState,
 } from "../watches/registry.js";
 
+import { evaluateScraper } from "../evaluation/service.js";
+
 const scraperService = createScraperService();
 
 function getRouteParam(
@@ -573,6 +575,53 @@ export async function getWatchScraperDataset(
 
     res.status(500).json({
       error: "Failed to get scraper dataset",
+    });
+  }
+}
+
+export async function evaluateWatchScraper(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  let watchId: string;
+
+  try {
+    watchId = getRouteParam(req.params.watchId, "watchId");
+  } catch {
+    res.status(400).json({
+      error: "watchId is required",
+    });
+    return;
+  }
+
+  try {
+    const result = await evaluateScraper(watchId);
+
+    res.status(200).json({
+      evaluation: result,
+    });
+  } catch (error) {
+    console.error("Failed to evaluate scraper:", error);
+
+    const message =
+      error instanceof Error ? error.message : "Failed to evaluate scraper";
+
+    if (message === "Watch not found." || message === "Scraper not found.") {
+      res.status(404).json({
+        error: message,
+      });
+      return;
+    }
+
+    if (message === "No latest scraper data is available for evaluation.") {
+      res.status(409).json({
+        error: message,
+      });
+      return;
+    }
+
+    res.status(500).json({
+      error: "Failed to evaluate scraper",
     });
   }
 }

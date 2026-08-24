@@ -120,3 +120,14 @@ export async function updateScraperState(
     data,
   });
 }
+
+export async function findLatestScraperEvaluation(scraperId: string) {
+  return prisma.scraperEvaluation.findFirst({
+    where: {
+      scraperId,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+}

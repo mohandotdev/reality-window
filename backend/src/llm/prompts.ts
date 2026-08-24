@@ -1,4 +1,7 @@
-import type { LLMReasoningRequest } from "./types.js";
+import type {
+  LLMReasoningRequest,
+  LLMEvaluationRequest,
+} from "./types.js";
 
 export const REASONING_RESPONSE_SCHEMA = {
   type: "object",
@@ -12,20 +15,24 @@ export const REASONING_RESPONSE_SCHEMA = {
         "insufficient evidence",
       ],
     },
+
     confidence: {
       type: "number",
       minimum: 0,
       maximum: 1,
     },
+
     reasoning: {
       type: "string",
     },
+
     keyFindings: {
       type: "array",
       items: {
         type: "string",
       },
     },
+
     evidenceRequirements: {
       type: "array",
       items: {
@@ -33,6 +40,7 @@ export const REASONING_RESPONSE_SCHEMA = {
       },
     },
   },
+
   required: [
     "assessment",
     "confidence",
@@ -63,7 +71,109 @@ Identify important evidence, contradictions, uncertainty, and what evidence shou
 Return concise, structured, evidence-based reasoning.
 `;
 
-export function buildReasoningPrompt(request: LLMReasoningRequest): string {
+export const EVALUATION_RESPONSE_SCHEMA = {
+  type: "object",
+
+  properties: {
+    verdict: {
+      type: "string",
+      enum: ["STILL_TRUE", "CHANGED", "UNCERTAIN"],
+    },
+
+    confidence: {
+      type: "number",
+    },
+
+    reasoning: {
+      type: "string",
+    },
+
+    evidence: {
+      type: "array",
+      items: {
+        type: "object",
+
+        properties: {
+          claim: {
+            type: "string",
+          },
+
+          sourceText: {
+            type: "string",
+          },
+        },
+
+        required: ["claim", "sourceText"],
+      },
+    },
+
+    changedFields: {
+      type: "array",
+
+      items: {
+        type: "object",
+
+        properties: {
+          field: {
+            type: "string",
+          },
+
+          previousValue: {},
+
+          currentValue: {},
+        },
+
+        required: ["field"],
+      },
+    },
+  },
+
+  required: [
+    "verdict",
+    "confidence",
+    "reasoning",
+    "evidence",
+    "changedFields",
+  ],
+};
+
+export const EVALUATION_SYSTEM_PROMPT = `
+You are the Reality Window evaluation engine.
+
+Your job is to determine whether a user's existing assumption
+is still supported by the latest observed web data.
+
+You MUST classify the observation as exactly one of:
+
+STILL_TRUE
+CHANGED
+UNCERTAIN
+
+STILL_TRUE:
+The latest evidence supports the assumption.
+
+CHANGED:
+The latest evidence materially contradicts or changes the assumption.
+
+UNCERTAIN:
+The latest data is insufficient, ambiguous, stale, or does not provide
+enough evidence to confidently determine whether the assumption changed.
+
+Rules:
+
+1. Do not infer a change merely because something is not mentioned.
+2. Do not treat unrelated information as evidence of change.
+3. Prefer explicit evidence from the latest data.
+4. Explain why the evidence supports the verdict.
+5. Confidence must be between 0 and 1.
+6. Evidence must contain claims grounded in the supplied data.
+7. changedFields should only contain fields that materially changed.
+8. If there is insufficient evidence, use UNCERTAIN.
+`;
+
+export function buildReasoningPrompt(
+  request: LLMReasoningRequest,
+): string {
   const sources = request.sources
     .map(
       (source, index) => `
@@ -147,5 +257,36 @@ IMPORTANT RULES:
 14. confidence must be a number between 0 and 1.
 
 Return ONLY valid JSON matching the expected response schema.
+`;
+}
+
+export function buildEvaluationPrompt(
+  request: LLMEvaluationRequest,
+): string {
+  return `
+Evaluate the following Reality Window watch.
+
+SUBJECT:
+${request.subject}
+
+CURRENT ASSUMPTION:
+${request.assumption}
+
+EVIDENCE REQUIREMENTS:
+${JSON.stringify(request.evidenceRequirements, null, 2)}
+
+LATEST OBSERVED DATA:
+${JSON.stringify(request.latestData, null, 2)}
+
+PREVIOUS EVALUATION:
+${
+  request.previousEvaluation
+    ? JSON.stringify(request.previousEvaluation, null, 2)
+    : "No previous evaluation exists."
+}
+
+Determine whether the latest observation supports the assumption.
+
+Return ONLY the structured JSON response.
 `;
 }

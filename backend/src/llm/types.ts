@@ -1,14 +1,30 @@
+import type {
+  LLMEvaluationRequest as EvaluationLLMEvaluationRequest,
+  LLMEvaluationResponse as EvaluationLLMEvaluationResponse,
+  LLMProvider as EvaluationLLMProvider,
+} from "../evaluation/types.js";
+
+/**
+ * Source supplied to the LLM reasoning engine.
+ */
+export interface LLMReasoningSource {
+  title: string;
+  url: string;
+  snippet: string;
+}
+
+/**
+ * Request used by the reasoning flow.
+ */
 export interface LLMReasoningRequest {
   subject: string;
   assumption: string;
-
-  sources: Array<{
-    title: string;
-    url: string;
-    snippet: string;
-  }>;
+  sources: LLMReasoningSource[];
 }
 
+/**
+ * Response returned by the reasoning flow.
+ */
 export interface LLMReasoningResponse {
   assessment: string;
   confidence: number;
@@ -17,27 +33,17 @@ export interface LLMReasoningResponse {
   evidenceRequirements: string[];
 }
 
-export interface LLMProvider {
-  readonly name: string;
+/**
+ * Evaluation types are owned by the evaluation domain.
+ *
+ * Re-export them here so existing imports from llm/types.ts
+ * remain compatible without maintaining duplicate definitions.
+ */
+export type LLMEvaluationRequest = EvaluationLLMEvaluationRequest;
 
-  reason(request: LLMReasoningRequest): Promise<LLMReasoningResponse>;
-}
+export type LLMEvaluationResponse = EvaluationLLMEvaluationResponse;
 
-export type LLMErrorCode =
-  | "MISSING_API_KEY"
-  | "TIMEOUT"
-  | "RATE_LIMITED"
-  | "AUTH_ERROR"
-  | "PROVIDER_ERROR"
-  | "MALFORMED_RESPONSE";
-
-export class LLMError extends Error {
-  constructor(
-    public readonly code: LLMErrorCode,
-    message: string,
-    public readonly retryable: boolean,
-  ) {
-    super(message);
-    this.name = "LLMError";
-  }
-}
+/**
+ * LLM provider contract.
+ */
+export type LLMProvider = EvaluationLLMProvider;

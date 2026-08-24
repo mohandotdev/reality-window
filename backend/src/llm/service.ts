@@ -2,6 +2,8 @@ import type {
   LLMProvider,
   LLMReasoningRequest,
   LLMReasoningResponse,
+  LLMEvaluationRequest,
+  LLMEvaluationResponse,
 } from "./types.js";
 
 import { createGeminiProviderFromEnv } from "./providers/gemini.js";
@@ -157,6 +159,71 @@ export class LLMService {
 
         console.warn(
           `Retrying ${provider.name} in ${delay}ms ` +
+            `(attempt ${attempt + 1}/${this.maxRetries})`,
+        );
+
+        await sleep(delay);
+      }
+    }
+
+    throw lastError;
+  }
+
+  /**
+   * Execute Evaluation
+   */
+
+  async evaluate(
+    request: LLMEvaluationRequest,
+  ): Promise<LLMEvaluationResponse> {
+    const providers = this.getOrderedProviders();
+
+    let lastError: unknown;
+
+    for (const provider of providers) {
+      try {
+        return await this.executeEvaluationWithRetry(provider, request);
+      } catch (error) {
+        lastError = error;
+
+        console.error(
+          `LLM evaluation provider failed: ${provider.name}`,
+          error,
+        );
+      }
+    }
+
+    throw new Error(
+      `All LLM providers failed for evaluation. Last error: ${getErrorMessage(lastError)}`,
+    );
+  }
+
+  private async executeEvaluationWithRetry(
+    provider: LLMProvider,
+    request: LLMEvaluationRequest,
+  ): Promise<LLMEvaluationResponse> {
+    let lastError: unknown;
+
+    for (let attempt = 0; attempt <= this.maxRetries; attempt++) {
+      try {
+        return await provider.evaluate(request);
+      } catch (error) {
+        lastError = error;
+
+        if (!isRetryableError(error)) {
+          throw error;
+        }
+
+        const isLastAttempt = attempt === this.maxRetries;
+
+        if (isLastAttempt) {
+          break;
+        }
+
+        const delay = this.retryDelayMs * Math.pow(2, attempt);
+
+        console.warn(
+          `Retrying ${provider.name} evaluation in ${delay}ms ` +
             `(attempt ${attempt + 1}/${this.maxRetries})`,
         );
 

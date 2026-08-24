@@ -46,7 +46,29 @@ model WatchScraper {
   updatedAt      DateTime @updatedAt
 
   watch          Watch @relation(fields: [watchId], references: [id], onDelete: Cascade)
+
+  evaluations    ScraperEvaluation[]
 }
+
+model ScraperEvaluation {
+  id           String   @id @default(cuid())
+  scraperId    String
+  collectionId String?
+
+  verdict      EvaluationVerdict
+  confidence   Float
+  reasoning    String
+
+  evidence      Json
+  changedFields Json
+
+  createdAt    DateTime @default(now())
+
+  scraper      WatchScraper @relation( fields: [scraperId], references: [id], onDelete: Cascade)
+
+  @@index([scraperId, createdAt])
+}
+
 
 enum ScraperStatus {
   PENDING
@@ -59,4 +81,10 @@ enum ScraperStatus {
   COMPLETED
   FAILED
   UNAVAILABLE
+}
+
+enum EvaluationVerdict {
+  STILL_TRUE
+  CHANGED
+  UNCERTAIN
 }

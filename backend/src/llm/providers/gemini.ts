@@ -1,16 +1,28 @@
 import { GoogleGenAI } from "@google/genai";
-import { buildReasoningPrompt } from "../prompts.js";
+
 import {
+  buildReasoningPrompt,
+  buildEvaluationPrompt,
   REASONING_SYSTEM_PROMPT,
   REASONING_RESPONSE_SCHEMA,
+  EVALUATION_RESPONSE_SCHEMA,
+  EVALUATION_SYSTEM_PROMPT,
 } from "../prompts.js";
+
 import { LLMService } from "../service.js";
 
 import type {
   LLMProvider,
   LLMReasoningRequest,
   LLMReasoningResponse,
+  LLMEvaluationRequest,
+  LLMEvaluationResponse,
 } from "../types.js";
+
+import type {
+  ChangedField,
+  EvaluationEvidence,
+} from "../../evaluation/types.js";
 
 const DEFAULT_MODEL = "gemini-2.5-flash";
 const DEFAULT_TIMEOUT_MS = 30_000;
@@ -30,21 +42,25 @@ function redactSecrets(text: string): string {
     .replace(/AIza[0-9A-Za-z_-]{20,}/g, "[redacted]")
     .replace(/GEMINI_API_KEY\s*=\s*\S+/gi, "GEMINI_API_KEY=[redacted]");
 }
-
 function getErrorStatus(error: unknown): number | undefined {
   if (typeof error !== "object" || error === null) {
     return undefined;
   }
 
-  if ("status" in error && typeof error.status === "number") {
-    return error.status;
+  if ("status" in error) {
+    const status = error.status;
+
+    if (typeof status === "number") {
+      return status;
+    }
   }
 
-  if (
-    "statusCode" in error &&
-    typeof (error as { statusCode: unknown }).statusCode === "number"
-  ) {
-    return (error as { statusCode: number }).statusCode;
+  if ("statusCode" in error) {
+    const statusCode = error.statusCode;
+
+    if (typeof statusCode === "number") {
+      return statusCode;
+    }
   }
 
   return undefined;
@@ -88,6 +104,126 @@ function createProviderError(error: unknown): Error {
   }
 
   return new Error(`Gemini provider error: ${message}`);
+}
+
+function parseEvaluationEvidence(value: unknown): EvaluationEvidence[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Gemini evaluation response has invalid evidence.");
+  }
+
+  const evidence: EvaluationEvidence[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      throw new Error("Gemini evaluation response has invalid evidence item.");
+    }
+
+    const record = item as Record<string, unknown>;
+
+    if (
+      typeof record.claim !== "string" ||
+      typeof record.sourceText !== "string"
+    ) {
+      throw new Error("Gemini evaluation response has invalid evidence item.");
+    }
+
+    evidence.push({
+      claim: record.claim,
+      sourceText: record.sourceText,
+    });
+  }
+
+  return evidence;
+}
+
+function parseChangedFields(value: unknown): ChangedField[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Gemini evaluation response has invalid changedFields.");
+  }
+
+  const changedFields: ChangedField[] = [];
+
+  for (const item of value) {
+    if (typeof item !== "object" || item === null || Array.isArray(item)) {
+      throw new Error(
+        "Gemini evaluation response has invalid changedField item.",
+      );
+    }
+
+    const record = item as Record<string, unknown>;
+
+    if (typeof record.field !== "string") {
+      throw new Error(
+        "Gemini evaluation response has invalid changedField item.",
+      );
+    }
+
+    changedFields.push({
+      field: record.field,
+      ...(Object.prototype.hasOwnProperty.call(record, "previousValue")
+        ? {
+            previousValue: record.previousValue,
+          }
+        : {}),
+      ...(Object.prototype.hasOwnProperty.call(record, "currentValue")
+        ? {
+            currentValue: record.currentValue,
+          }
+        : {}),
+    });
+  }
+
+  return changedFields;
+}
+
+function parseEvaluationResponse(text: string): LLMEvaluationResponse {
+  let parsed: unknown;
+
+  try {
+    parsed = JSON.parse(text);
+  } catch {
+    throw new Error(
+      "Gemini returned invalid JSON for the evaluation response.",
+    );
+  }
+
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    throw new Error("Gemini returned an invalid evaluation response.");
+  }
+
+  const data = parsed as Record<string, unknown>;
+
+  if (
+    data.verdict !== "STILL_TRUE" &&
+    data.verdict !== "CHANGED" &&
+    data.verdict !== "UNCERTAIN"
+  ) {
+    throw new Error("Gemini evaluation response has an invalid verdict.");
+  }
+
+  if (
+    typeof data.confidence !== "number" ||
+    data.confidence < 0 ||
+    data.confidence > 1
+  ) {
+    throw new Error("Gemini evaluation response has invalid confidence.");
+  }
+
+  if (typeof data.reasoning !== "string") {
+    throw new Error("Gemini evaluation response is missing reasoning.");
+  }
+
+  const evidence = parseEvaluationEvidence(data.evidence);
+
+  const changedFields = parseChangedFields(data.changedFields);
+
+  return {
+    verdict: data.verdict,
+    confidence: data.confidence,
+    reasoning: data.reasoning,
+    evidence,
+    changedFields,
+  };
 }
 
 interface GeminiProviderOptions {
@@ -164,6 +300,46 @@ export class GeminiProvider implements LLMProvider {
       throw createProviderError(error);
     }
   }
+
+  async evaluate(
+    request: LLMEvaluationRequest,
+  ): Promise<LLMEvaluationResponse> {
+    const prompt = buildEvaluationPrompt(request);
+
+    try {
+      const response = await this.client.models.generateContent({
+        model: this.model,
+        contents: prompt,
+
+        config: {
+          systemInstruction: EVALUATION_SYSTEM_PROMPT,
+
+          responseMimeType: "application/json",
+
+          responseJsonSchema: EVALUATION_RESPONSE_SCHEMA,
+
+          abortSignal: AbortSignal.timeout(this.timeoutMs),
+        },
+      });
+
+      const text = response.text?.trim() ?? "";
+
+      if (!text) {
+        throw new Error("Gemini returned an empty evaluation response.");
+      }
+
+      return parseEvaluationResponse(text);
+    } catch (error) {
+      if (
+        error instanceof Error &&
+        error.message === "Gemini returned an empty evaluation response."
+      ) {
+        throw error;
+      }
+
+      throw createProviderError(error);
+    }
+  }
 }
 
 function parseReasoningResponse(text: string): LLMReasoningResponse {
@@ -175,7 +351,7 @@ function parseReasoningResponse(text: string): LLMReasoningResponse {
     throw new Error("Gemini returned invalid JSON for the reasoning response.");
   }
 
-  if (typeof parsed !== "object" || parsed === null) {
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
     throw new Error("Gemini returned an invalid reasoning response.");
   }
 

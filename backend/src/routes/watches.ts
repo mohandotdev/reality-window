@@ -8,6 +8,7 @@ import {
   getWatchScraperDataset,
   getWatchScraperProgress,
   runWatchScraper,
+  evaluateWatchScraper
 } from "../controllers/watch.controller.js";
 
 const router = Router();
@@ -31,5 +32,7 @@ router.post("/:watchId/scraper/approve", approveWatchScraper);
 router.post("/:watchId/scraper/run", runWatchScraper);
 
 router.get("/:watchId/scraper/dataset/:collectionId", getWatchScraperDataset);
+
+router.post("/:watchId/scraper/evaluate", evaluateWatchScraper);
 
 export default router;
