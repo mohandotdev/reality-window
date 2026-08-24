@@ -6,13 +6,16 @@ export function SiteHeader() {
     <header className="border-b border-border">
       <Container className="flex items-center justify-between py-5">
         <Link to="/" className="flex items-center gap-2.5">
-          <span
-            aria-hidden
-            className="block h-4 w-5 rounded-[2px] border border-foreground"
-            style={{ boxShadow: "inset 0 -5px 0 -4px currentColor, inset -8px 0 0 -7px currentColor" }}
+          <img
+            src="/brand/reality-window.svg"
+            alt=""
+            aria-hidden="true"
+            className="h-8 w-8 object-contain"
           />
+
           <span className="font-display text-xl leading-none">Reality Window</span>
         </Link>
+
         <nav className="flex items-center gap-6">
           <Link
             to="/watches"
@@ -21,6 +24,7 @@ export function SiteHeader() {
           >
             My watches
           </Link>
+
           <ButtonLink to="/create" variant="quiet" className="py-2 text-sm">
             Create a watch
           </ButtonLink>
