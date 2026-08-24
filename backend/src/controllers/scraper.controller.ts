@@ -1,9 +1,9 @@
 import type { Request, Response } from "express";
 import { Prisma } from "../generated/prisma/client.js";
+import { prisma } from "../perisistence/client.js";
 import {
   findScraperByCollectorId,
   findScraperByTargetUrl,
-  updateScraperState,
 } from "../watches/registry.js";
 
 type BrightDataWebhookRecord = Record<string, unknown>;
@@ -78,13 +78,58 @@ export async function scraperWebhook(
       return;
     }
 
-    // The /scraper/run endpoint already persisted collectionId. The webhook
-    // is the completion signal, so persist the actual records and complete it.
-    const updated = await updateScraperState(scraper.watchId, {
-      status: "COMPLETED",
-      latestData: normalizeWebhookData(payload),
-      lastRunAt: new Date(),
+    // A Bright Data webhook is the completion signal for the current run.
+    // Only a scraper that is currently RUNNING may consume a completion
+    // webhook. This makes the handler idempotent: once the first webhook
+    // transitions RUNNING -> COMPLETED, any retry/duplicate webhook cannot
+    // overwrite latestData or lastRunAt again.
+    //
+    // updateMany performs the state check and update atomically in the DB,
+    // which also protects against two identical webhooks arriving at the
+    // same time.
+    const updatedCount = await prisma.watchScraper.updateMany({
+      where: {
+        watchId: scraper.watchId,
+        status: "RUNNING",
+      },
+      data: {
+        status: "COMPLETED",
+        latestData: normalizeWebhookData(payload),
+        lastRunAt: new Date(),
+      },
     });
+
+    if (updatedCount.count === 0) {
+      const current = await prisma.watchScraper.findUnique({
+        where: { watchId: scraper.watchId },
+      });
+
+      console.log("Ignoring duplicate Bright Data webhook:", {
+        watchId: scraper.watchId,
+        collectorId: scraper.collectorId,
+        currentStatus: current?.status,
+      });
+
+      res.status(200).json({
+        received: true,
+        duplicate: true,
+        status: current?.status ?? scraper.status,
+        watchId: scraper.watchId,
+        collectorId: scraper.collectorId,
+        collectionId: scraper.collectionId,
+      });
+      return;
+    }
+
+    const updated = await prisma.watchScraper.findUnique({
+      where: { watchId: scraper.watchId },
+    });
+
+    if (!updated) {
+      throw new Error(
+        `Scraper disappeared after webhook update: ${scraper.watchId}`,
+      );
+    }
 
     console.log("Watch scraper completed:", {
       watchId: updated.watchId,
@@ -96,6 +141,7 @@ export async function scraperWebhook(
 
     res.status(200).json({
       received: true,
+      duplicate: false,
       status: "COMPLETED",
       watchId: updated.watchId,
       collectorId: updated.collectorId,

@@ -45,7 +45,10 @@ export async function findWatchById(watchId: string) {
   });
 }
 
-export async function createWatchRecord(plan: WatchPlan, scenarioHash: string) {
+export async function createWatchRecord(
+  plan: WatchPlan,
+  scenarioHash: string,
+) {
   return prisma.watch.create({
     data: {
       subject: plan.subject,
@@ -68,7 +71,9 @@ export async function createWatchRecord(plan: WatchPlan, scenarioHash: string) {
 export async function createWatchScraperRecord(data: {
   watchId: string;
   target: object;
-  status?: Parameters<typeof prisma.watchScraper.create>[0]["data"]["status"];
+  status?: Parameters<
+    typeof prisma.watchScraper.create
+  >[0]["data"]["status"];
 }) {
   return prisma.watchScraper.create({
     data: {
@@ -123,6 +128,17 @@ export async function updateScraperState(
 
 export async function findLatestScraperEvaluation(scraperId: string) {
   return prisma.scraperEvaluation.findFirst({
+    where: {
+      scraperId,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+}
+
+export async function findScraperEvaluations(scraperId: string) {
+  return prisma.scraperEvaluation.findMany({
     where: {
       scraperId,
     },

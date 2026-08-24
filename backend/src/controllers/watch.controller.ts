@@ -17,7 +17,9 @@ import { createScenarioHash } from "../perisistence/scenario-hash.js";
 import {
   createWatchRecord,
   createWatchScraperRecord,
+  findLatestScraperEvaluation,
   findScraperByCollectorId,
+  findScraperEvaluations,
   findWatchById,
   findWatchByScenarioHash,
   updateScraperState,
@@ -36,6 +38,13 @@ function getRouteParam(
   }
 
   throw new Error(`${name} is required`);
+}
+
+export class ScraperStateError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "ScraperStateError";
+  }
 }
 
 export async function createWatch(req: Request, res: Response): Promise<void> {
@@ -504,11 +513,8 @@ export async function runWatchScraper(
       return;
     }
 
-    if (scraper.status == "APPROVED" || scraper.status == "COMPLETED") {
-      res.status(409).json({
-        error: `Scraper cannot run from status ${scraper.status}`,
-      });
-      return;
+    if (scraper.status === "RUNNING") {
+      throw new ScraperStateError("Scraper is already running");
     }
 
     const target = scraper.target as ScraperTarget | null;
@@ -540,6 +546,13 @@ export async function runWatchScraper(
     });
   } catch (error) {
     console.error("Failed to run scraper:", error);
+
+    if (error instanceof ScraperStateError) {
+      res.status(409).json({
+        error: error.message,
+      });
+      return;
+    }
 
     await updateScraperState(watchId, {
       status: "FAILED",
@@ -579,6 +592,119 @@ export async function getWatchScraperDataset(
   }
 }
 
+export async function getWatch(req: Request, res: Response): Promise<void> {
+  let watchId: string;
+
+  try {
+    watchId = getRouteParam(req.params.watchId, "watchId");
+  } catch {
+    res.status(400).json({
+      error: "watchId is required",
+    });
+    return;
+  }
+
+  try {
+    const watch = await findWatchById(watchId);
+
+    if (!watch) {
+      res.status(404).json({
+        error: "Watch not found",
+      });
+      return;
+    }
+
+    const latestEvaluation = watch.scraper
+      ? await findLatestScraperEvaluation(watch.scraper.id)
+      : null;
+
+    res.status(200).json({
+      watch: {
+        id: watch.id,
+        subject: watch.subject,
+        assumption: watch.assumption,
+        searchQueries: watch.searchQueries,
+        sources: watch.sources,
+        evidenceRequirements: watch.evidenceRequirements,
+        createdAt: watch.createdAt,
+        updatedAt: watch.updatedAt,
+      },
+
+      scraper: watch.scraper
+        ? {
+            id: watch.scraper.id,
+            collectorId: watch.scraper.collectorId,
+            aiJobId: watch.scraper.aiJobId,
+            collectionId: watch.scraper.collectionId,
+            status: watch.scraper.status,
+            target: watch.scraper.target,
+            schema: watch.scraper.schema,
+            sampleData: watch.scraper.sampleData,
+            latestData: watch.scraper.latestData,
+            approvedAt: watch.scraper.approvedAt,
+            lastRunAt: watch.scraper.lastRunAt,
+            createdAt: watch.scraper.createdAt,
+            updatedAt: watch.scraper.updatedAt,
+          }
+        : null,
+
+      evaluation: latestEvaluation,
+    });
+  } catch (error) {
+    console.error("Failed to get watch:", error);
+
+    res.status(500).json({
+      error: "Failed to get watch",
+    });
+  }
+}
+
+export async function getWatchEvaluations(
+  req: Request,
+  res: Response,
+): Promise<void> {
+  let watchId: string;
+
+  try {
+    watchId = getRouteParam(req.params.watchId, "watchId");
+  } catch {
+    res.status(400).json({
+      error: "watchId is required",
+    });
+    return;
+  }
+
+  try {
+    const watch = await findWatchById(watchId);
+
+    if (!watch) {
+      res.status(404).json({
+        error: "Watch not found",
+      });
+      return;
+    }
+
+    if (!watch.scraper) {
+      res.status(200).json({
+        evaluations: [],
+      });
+      return;
+    }
+
+    const evaluations = await findScraperEvaluations(watch.scraper.id);
+
+    res.status(200).json({
+      evaluations,
+    });
+  } catch (error) {
+    console.error("Failed to get watch evaluations:", error);
+
+    res.status(500).json({
+      error: "Failed to get watch evaluations",
+    });
+  }
+}
+
 export async function evaluateWatchScraper(
   req: Request,
   res: Response,
@@ -613,7 +739,10 @@ export async function evaluateWatchScraper(
       return;
     }
 
-    if (message === "No latest scraper data is available for evaluation.") {
+    if (
+      message === "No latest scraper data is available for evaluation." ||
+      message === "Latest scraper data does not contain evaluable records."
+    ) {
       res.status(409).json({
         error: message,
       });

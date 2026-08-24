@@ -3,21 +3,14 @@ import { Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../perisistence/client.js";
 import { createLlmService } from "../llm/service.js";
 
-import type { RealityEvaluation } from "./types.js";
+import type {
+  ChangedField,
+  EvaluationEvidence,
+  RealityEvaluation,
+} from "./types.js";
 
 const llmService = createLlmService();
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/**
- * Normalize Prisma JSON into the structure expected by the
- * evaluation LLM.
- *
- * Scraper Studio normally returns an array of objects, but this
- * also safely handles a single object.
- */
 function normalizeLatestData(
   value: Prisma.JsonValue,
 ): Record<string, unknown>[] {
@@ -37,9 +30,16 @@ function normalizeLatestData(
   return [];
 }
 
+export interface PersistedRealityEvaluation extends RealityEvaluation {
+  id: string;
+  scraperId: string;
+  collectionId: string | null;
+  createdAt: Date;
+}
+
 export async function evaluateScraper(
   watchId: string,
-): Promise<RealityEvaluation> {
+): Promise<PersistedRealityEvaluation> {
   const watch = await prisma.watch.findUnique({
     where: {
       id: watchId,
@@ -78,6 +78,10 @@ export async function evaluateScraper(
 
   const latestData = normalizeLatestData(watch.scraper.latestData);
 
+  if (latestData.length === 0) {
+    throw new Error("Latest scraper data does not contain evaluable records.");
+  }
+
   const result = await llmService.evaluate({
     subject: watch.subject,
     assumption: watch.assumption,
@@ -95,7 +99,7 @@ export async function evaluateScraper(
       : undefined,
   });
 
-  await prisma.scraperEvaluation.create({
+  const evaluation = await prisma.scraperEvaluation.create({
     data: {
       scraperId: watch.scraper.id,
       collectionId: watch.scraper.collectionId,
@@ -104,18 +108,23 @@ export async function evaluateScraper(
       confidence: result.confidence,
       reasoning: result.reasoning,
 
-      /*
-       * Prisma's generated InputJsonValue type is stricter than
-       * normal TypeScript object/array types.
-       *
-       * These values have already been validated by the LLM provider,
-       * so convert them explicitly at the persistence boundary.
-       */
       evidence: result.evidence as unknown as Prisma.InputJsonValue,
 
       changedFields: result.changedFields as unknown as Prisma.InputJsonValue,
     },
   });
 
-  return result;
+  return {
+    id: evaluation.id,
+    scraperId: evaluation.scraperId,
+    collectionId: evaluation.collectionId,
+    createdAt: evaluation.createdAt,
+
+    verdict: evaluation.verdict,
+    confidence: evaluation.confidence,
+    reasoning: evaluation.reasoning,
+
+    evidence: result.evidence as EvaluationEvidence[],
+    changedFields: result.changedFields as ChangedField[],
+  };
 }

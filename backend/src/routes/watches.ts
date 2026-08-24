@@ -4,11 +4,13 @@ import {
   approveWatchScraper,
   createWatch,
   createWatchScraper,
+  evaluateWatchScraper,
+  getWatch,
+  getWatchEvaluations,
   getWatchScraper,
   getWatchScraperDataset,
   getWatchScraperProgress,
   runWatchScraper,
-  evaluateWatchScraper
 } from "../controllers/watch.controller.js";
 
 const router = Router();
@@ -17,6 +19,15 @@ const router = Router();
  * Watch planning.
  */
 router.post("/", createWatch);
+
+/**
+ * Watch state / evaluation.
+ */
+router.get("/:watchId", getWatch);
+
+router.post("/:watchId/evaluate", evaluateWatchScraper);
+
+router.get("/:watchId/evaluations", getWatchEvaluations);
 
 /**
  * Scraper lifecycle.
@@ -32,7 +43,5 @@ router.post("/:watchId/scraper/approve", approveWatchScraper);
 router.post("/:watchId/scraper/run", runWatchScraper);
 
 router.get("/:watchId/scraper/dataset/:collectionId", getWatchScraperDataset);
-
-router.post("/:watchId/scraper/evaluate", evaluateWatchScraper);
 
 export default router;
