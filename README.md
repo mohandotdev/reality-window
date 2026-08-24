@@ -1,6 +1,9 @@
 # Reality Window
 
-You state something you believe. We watch whether it's still true.
+> You don't need another tab.  
+> Built for people who are tired of checking.
+
+You state something you believe. Reality Window watches whether it's still true.
 
 Built for **Into the Scrape-Verse** — WeMakeDevs × Bright Data.
 
