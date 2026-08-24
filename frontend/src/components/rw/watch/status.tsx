@@ -16,8 +16,23 @@ type StatusMeta = {
 
 export const statusMeta: Record<WatchStatus, StatusMeta> = {
   unchecked: { label: STATUS_LABEL.unchecked, dot: "bg-border-strong", text: "text-muted-foreground" },
+  preparing: {
+    label: STATUS_LABEL.preparing,
+    dot: "bg-accent",
+    text: "text-accent",
+    art: checkingArt,
+    alt: "A person leafing through documents, looking for the answer",
+  },
+  ready: { label: STATUS_LABEL.ready, dot: "bg-border-strong", text: "text-muted-foreground" },
   checking: {
     label: STATUS_LABEL.checking,
+    dot: "bg-accent",
+    text: "text-accent",
+    art: checkingArt,
+    alt: "A person leafing through documents, looking for the answer",
+  },
+  evidence_received: {
+    label: STATUS_LABEL.evidence_received,
     dot: "bg-accent",
     text: "text-accent",
     art: checkingArt,
@@ -44,6 +59,13 @@ export const statusMeta: Record<WatchStatus, StatusMeta> = {
     art: needsReviewArt,
     alt: "A person holding two conflicting documents",
   },
+  unavailable: {
+    label: STATUS_LABEL.unavailable,
+    dot: "bg-border-strong",
+    text: "text-muted-foreground",
+    art: needsReviewArt,
+    alt: "A person holding two conflicting documents",
+  },
   failed: { label: STATUS_LABEL.failed, dot: "bg-destructive", text: "text-destructive" },
 };
 
@@ -52,7 +74,11 @@ export function StatusTag({ status, className }: { status: WatchStatus; classNam
   return (
     <span className={cn("inline-flex items-center gap-2 text-sm font-medium", meta.text, className)}>
       <span
-        className={cn("size-2 rounded-full", meta.dot, status === "checking" && "animate-pulse")}
+        className={cn(
+          "size-2 rounded-full",
+          meta.dot,
+          (status === "checking" || status === "preparing") && "animate-pulse",
+        )}
         aria-hidden
       />
       {meta.label}

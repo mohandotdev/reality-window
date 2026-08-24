@@ -5,8 +5,8 @@ import { watchService } from "@/services/watches";
 import type { CreateWatchInput, Watch } from "@/types/watch";
 
 const POLL_INTERVAL_MS = 2000;
-/** Stop polling after this long so a stuck run never loops forever. */
-const POLL_TIMEOUT_MS = 90_000;
+/** Stop background refetch after this long so a stuck run never loops forever. */
+const POLL_TIMEOUT_MS = 240_000;
 
 export const watchKeys = {
   all: ["watches"] as const,
@@ -14,11 +14,15 @@ export const watchKeys = {
   history: (id: string) => ["watches", id, "evaluations"] as const,
 };
 
+function shouldPollStatus(status: Watch["status"] | undefined): boolean {
+  return status === "preparing" || status === "checking";
+}
+
 export function useWatchList() {
   return useQuery({ queryKey: watchKeys.all, queryFn: () => watchService.list() });
 }
 
-export function useWatch(id: string) {
+export function useWatch(id: string, pollWhilePending = false) {
   const [startedAt] = useState(() => Date.now());
 
   return useQuery({
@@ -26,9 +30,10 @@ export function useWatch(id: string) {
     queryFn: () => watchService.get(id),
     refetchInterval: (query) => {
       const watch = query.state.data as Watch | undefined;
-      if (!watch || watch.status !== "checking") return false;
+      if (!pollWhilePending && !shouldPollStatus(watch?.status)) return false;
       if (Date.now() - startedAt > POLL_TIMEOUT_MS) return false;
-      return POLL_INTERVAL_MS;
+      if (pollWhilePending || shouldPollStatus(watch?.status)) return POLL_INTERVAL_MS;
+      return false;
     },
   });
 }
@@ -58,13 +63,15 @@ export function useCreateWatch() {
   });
 }
 
-export function useEvaluateWatch(id: string) {
+export function useRunCheck(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: () => watchService.evaluate(id),
-    onSuccess: (watch) => {
+    mutationFn: () => watchService.runCheck(id),
+    onSuccess: async (watch) => {
       queryClient.setQueryData(watchKeys.detail(id), watch);
-      queryClient.invalidateQueries({ queryKey: watchKeys.all });
+      await queryClient.invalidateQueries({ queryKey: watchKeys.detail(id) });
+      await queryClient.invalidateQueries({ queryKey: watchKeys.history(id) });
+      await queryClient.invalidateQueries({ queryKey: watchKeys.all });
     },
   });
 }

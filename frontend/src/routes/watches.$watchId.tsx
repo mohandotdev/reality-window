@@ -11,7 +11,7 @@ import {
   SourceSection,
 } from "@/components/rw/watch/sections";
 import { Pipeline, StatusArt, StatusTag } from "@/components/rw/watch/status";
-import { useEvaluateWatch, useWatch, useWatchHistory } from "@/hooks/use-watches";
+import { useRunCheck, useWatch, useWatchHistory } from "@/hooks/use-watches";
 import { relativeTime } from "@/lib/format";
 import { friendlyError } from "@/services/api-client";
 
@@ -39,7 +39,7 @@ function WatchDetail() {
   const { watchId } = Route.useParams();
   const { check } = Route.useSearch();
   const { data: watch, isPending, error, refetch } = useWatch(watchId);
-  const evaluate = useEvaluateWatch(watchId);
+  const runCheckMutation = useRunCheck(watchId);
   const { data: history } = useWatchHistory(watchId, watch?.latestEvaluation?.id);
   const autoRan = useRef(false);
   // Local run state: the request that kicks off a check returns before the
@@ -51,11 +51,11 @@ function WatchDetail() {
   const runCheck = useCallback(() => {
     setCheckError(null);
     setStarting(true);
-    evaluate
+    runCheckMutation
       .mutateAsync()
       .catch((err: unknown) => setCheckError(err))
       .finally(() => setStarting(false));
-  }, [evaluate]);
+  }, [runCheckMutation]);
 
   // A freshly created watch starts its first check by itself.
   useEffect(() => {

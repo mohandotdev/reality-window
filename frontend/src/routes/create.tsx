@@ -1,12 +1,6 @@
 import { useState } from "react";
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
-import {
-  Button,
-  Container,
-  Eyebrow,
-  TextAreaField,
-  TextField,
-} from "@/components/rw/primitives";
+import { Button, Container, Eyebrow, TextAreaField, TextField } from "@/components/rw/primitives";
 import { SiteFooter, SiteHeader } from "@/components/rw/site-chrome";
 import { DemoToggle } from "@/components/rw/watch/demo-toggle";
 import { useCreateWatch } from "@/hooks/use-watches";
@@ -29,7 +23,7 @@ export const Route = createFileRoute("/create")({
   component: CreateWatch,
 });
 
-type WatchDraft = { subject: string; assumption: string; sourceUrl: string };
+type WatchDraft = { subject: string; assumption: string };
 type Errors = Partial<Record<keyof WatchDraft, string>>;
 
 function validate(draft: WatchDraft): Errors {
@@ -37,21 +31,13 @@ function validate(draft: WatchDraft): Errors {
   if (draft.subject.trim().length < 3) errors.subject = "Tell us what you're watching.";
   if (draft.assumption.trim().length < 10)
     errors.assumption = "Write the assumption you want us to keep checking.";
-  if (draft.sourceUrl.trim()) {
-    try {
-      const url = new URL(draft.sourceUrl.trim());
-      if (!/^https?:$/.test(url.protocol)) throw new Error("bad protocol");
-    } catch {
-      errors.sourceUrl = "That doesn't look like a web address.";
-    }
-  }
   return errors;
 }
 
 function CreateWatch() {
   const navigate = useNavigate();
   const createWatch = useCreateWatch();
-  const [draft, setDraft] = useState<WatchDraft>({ subject: "", assumption: "", sourceUrl: "" });
+  const [draft, setDraft] = useState<WatchDraft>({ subject: "", assumption: "" });
   const [errors, setErrors] = useState<Errors>({});
 
   const set = (key: keyof WatchDraft) => (value: string) => {
@@ -68,9 +54,9 @@ function CreateWatch() {
     const watch = await createWatch.mutateAsync({
       subject: draft.subject.trim(),
       assumption: draft.assumption.trim(),
-      sourceUrl: draft.sourceUrl.trim() || undefined,
     });
     navigate({ to: "/watches/$watchId", params: { watchId: watch.id }, search: { check: true } });
+    // check=true starts the scraper workflow on the detail page — not evaluate.
   }
 
   return (
@@ -111,21 +97,6 @@ function CreateWatch() {
             />
             <FieldError id="assumption-error" message={errors.assumption} />
           </div>
-          <div>
-            <TextField
-              id="sourceUrl"
-              label="Source URL"
-              helper="If you already know where the answer lives, point us at it."
-              placeholder="https://example.com/article"
-              type="url"
-              optional
-              value={draft.sourceUrl}
-              onChange={(e) => set("sourceUrl")(e.target.value)}
-              aria-invalid={errors.sourceUrl ? true : undefined}
-              aria-describedby={errors.sourceUrl ? "sourceUrl-error" : undefined}
-            />
-            <FieldError id="sourceUrl-error" message={errors.sourceUrl} />
-          </div>
           <div className="rule-top pt-8">
             <Button type="submit" disabled={createWatch.isPending}>
               {createWatch.isPending ? "Starting the watch…" : "Start watching"}
@@ -134,7 +105,6 @@ function CreateWatch() {
               <p className="mt-4 text-sm text-destructive">{friendlyError(createWatch.error)}</p>
             )}
           </div>
-
         </form>
 
         <div className="rule-top mt-16 pt-10">
@@ -151,7 +121,6 @@ function CreateWatch() {
                     setDraft({
                       subject: t.subject,
                       assumption: t.assumption,
-                      sourceUrl: t.sourceUrl ?? "",
                     })
                   }
                   className="group flex w-full items-baseline justify-between gap-6 py-4 text-left transition-colors hover:text-accent"

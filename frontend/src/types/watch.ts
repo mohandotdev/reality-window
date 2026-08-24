@@ -9,10 +9,14 @@
 /** Human-facing status of a watch or an evaluation. */
 export type WatchStatus =
   | "unchecked"
+  | "preparing"
+  | "ready"
   | "checking"
+  | "evidence_received"
   | "still_true"
   | "changed"
   | "needs_review"
+  | "unavailable"
   | "failed";
 
 /** Stage of the current run, used by the compact pipeline display. */
@@ -68,19 +72,26 @@ export type Watch = {
   createdAt: string;
   lastCheckedAt?: string | undefined;
   latestEvaluation?: Evaluation | undefined;
+  /** Backend scraper status, used by the check workflow — not shown as copy. */
+  scraperStatus?: string | null | undefined;
+  /** Present when Bright Data asked for schema review. Not displayed. */
+  scraperSchema?: unknown;
 };
 
 export type CreateWatchInput = {
   subject: string;
   assumption: string;
-  sourceUrl?: string | undefined;
 };
 
 export const STATUS_LABEL: Record<WatchStatus, string> = {
-  unchecked: "Not checked yet",
+  unchecked: "Not checked",
+  preparing: "Preparing",
+  ready: "Ready",
   checking: "Checking",
+  evidence_received: "Evidence received",
   still_true: "Still true",
   changed: "Something changed",
   needs_review: "Needs review",
+  unavailable: "Unavailable",
   failed: "We couldn't complete the check",
 };

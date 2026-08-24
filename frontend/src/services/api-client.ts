@@ -13,6 +13,10 @@ export const endpoints = {
   watch: (id: string) => `/api/watches/${encodeURIComponent(id)}`,
   evaluate: (id: string) => `/api/watches/${encodeURIComponent(id)}/evaluate`,
   evaluations: (id: string) => `/api/watches/${encodeURIComponent(id)}/evaluations`,
+  scraper: (id: string) => `/api/watches/${encodeURIComponent(id)}/scraper`,
+  scraperProgress: (id: string) => `/api/watches/${encodeURIComponent(id)}/scraper/progress`,
+  scraperApprove: (id: string) => `/api/watches/${encodeURIComponent(id)}/scraper/approve`,
+  scraperRun: (id: string) => `/api/watches/${encodeURIComponent(id)}/scraper/run`,
 };
 
 /** User-facing error. Technical detail stays on `.detail` for the console. */
@@ -27,9 +31,52 @@ export class ApiError extends Error {
   }
 }
 
-function humanMessage(status: number): string {
+function payloadError(payload: unknown): string | undefined {
+  if (!payload || typeof payload !== "object") return undefined;
+  const error = (payload as { error?: unknown }).error;
+  return typeof error === "string" && error.trim() ? error.trim() : undefined;
+}
+
+function mapBackendError(message: string): string | undefined {
+  if (message === "No latest scraper data is available for evaluation.") {
+    return "The latest information isn't ready yet.";
+  }
+  if (message === "Latest scraper data does not contain evaluable records.") {
+    return "We couldn't find enough usable evidence to evaluate this watch.";
+  }
+  if (
+    message === "Collector has not been created yet" ||
+    message === "Collector has not been created" ||
+    message === "AI Flow job has not been created yet"
+  ) {
+    return "The source check is still being prepared. Try again shortly.";
+  }
+  if (message === "Scraper is already running") {
+    return "This check is already in progress.";
+  }
+  if (message.startsWith("Scraper cannot be approved from status")) {
+    return "This watch isn't waiting for review.";
+  }
+  if (message === "Scraper target URL is missing") {
+    return "We don't have a source to check yet.";
+  }
+  if (message === "No sources available for this watch" || message === "Primary source URL is missing") {
+    return "We couldn't find a source to check for this watch.";
+  }
+  return undefined;
+}
+
+function humanMessage(status: number, payload?: unknown): string {
+  const backend = payloadError(payload);
+  if (backend) {
+    const mapped = mapBackendError(backend);
+    if (mapped) return mapped;
+    if (status === 409) return "This watch isn't ready for that step yet.";
+  }
+
   if (status === 404) return "We couldn't find that watch.";
   if (status === 400 || status === 422) return "Something in that request didn't look right.";
+  if (status === 409) return "This watch isn't ready for that step yet.";
   if (status === 429) return "We're checking too often right now. Give it a moment.";
   if (status >= 500) return "Something went wrong while checking the source.";
   return "Something went wrong. Please try again.";
@@ -50,6 +97,7 @@ export async function apiRequest<T>(
       ...(init?.signal ? { signal: init.signal } : {}),
     });
   } catch (cause) {
+    if (init?.signal?.aborted) throw cause;
     console.error("[reality-window] network error", { url, cause });
     throw new ApiError("We couldn't reach the service. Check your connection and try again.", 0, cause);
   }
@@ -64,7 +112,7 @@ export async function apiRequest<T>(
 
   if (!response.ok) {
     console.error("[reality-window] api error", { url, status: response.status, payload });
-    throw new ApiError(humanMessage(response.status), response.status, payload);
+    throw new ApiError(humanMessage(response.status, payload), response.status, payload);
   }
 
   return payload as T;
@@ -73,6 +121,9 @@ export async function apiRequest<T>(
 /** Any thrown value → a sentence we're willing to show a user. */
 export function friendlyError(error: unknown, fallback = "Something went wrong. Please try again."): string {
   if (error instanceof ApiError) return error.message;
+  if (error instanceof DOMException && error.name === "AbortError") {
+    return "The check was cancelled.";
+  }
   if (error instanceof Error) {
     console.error("[reality-window]", error);
     // Never surface raw framework/ORM error names.

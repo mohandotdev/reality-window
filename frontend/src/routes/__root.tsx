@@ -80,7 +80,8 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { title: "Reality Window" },
       {
         name: "description",
-        content: "Tell us what you believe. Reality Window watches the source and tells you when it stops being true.",
+        content:
+          "Tell us what you believe. Reality Window watches the source and tells you when it stops being true.",
       },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
@@ -96,7 +97,7 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         rel: "stylesheet",
         href: "https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Work+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap",
       },
-      { rel: "icon", href: "/favicon.ico", type: "image/x-icon" },
+      { rel: "icon", href: "/brand/reality-window-favicon.svg", type: "image/x-icon" },
     ],
   }),
   shellComponent: RootShell,

@@ -87,6 +87,14 @@ function statusHeadline(evaluation: Evaluation): string {
       return "Check failed";
     case "checking":
       return "Checking";
+    case "preparing":
+      return "Preparing";
+    case "ready":
+      return "Ready";
+    case "evidence_received":
+      return "Evidence received";
+    case "unavailable":
+      return "Unavailable";
     default:
       return "Not checked yet";
   }
