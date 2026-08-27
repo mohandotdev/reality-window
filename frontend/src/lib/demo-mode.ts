@@ -7,6 +7,7 @@
  */
 
 const STORAGE_KEY = "rw:demo-mode";
+export const DEMO_MODE_CHANGE_EVENT = "rw:demo-mode-change";
 
 export const API_BASE_URL: string =
   (import.meta.env["VITE_RW_API_BASE_URL"] as string | undefined)?.replace(/\/$/, "") ?? "";
@@ -28,4 +29,5 @@ export function isDemoMode(): boolean {
 export function setDemoMode(on: boolean) {
   if (typeof window === "undefined") return;
   window.localStorage.setItem(STORAGE_KEY, on ? "on" : "off");
+  window.dispatchEvent(new Event(DEMO_MODE_CHANGE_EVENT));
 }

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { isDemoMode } from "@/lib/demo-mode";
+import { DEMO_MODE_CHANGE_EVENT, isDemoMode } from "@/lib/demo-mode";
 import { watchService } from "@/services/watches";
 import type { CreateWatchInput, Watch } from "@/types/watch";
 
@@ -19,14 +19,16 @@ function shouldPollStatus(status: Watch["status"] | undefined): boolean {
 }
 
 export function useWatchList() {
-  return useQuery({ queryKey: watchKeys.all, queryFn: () => watchService.list() });
+  const demo = useDemoMode();
+  return useQuery({ queryKey: [...watchKeys.all, demo], queryFn: () => watchService.list() });
 }
 
 export function useWatch(id: string, pollWhilePending = false) {
+  const demo = useDemoMode();
   const [startedAt] = useState(() => Date.now());
 
   return useQuery({
-    queryKey: watchKeys.detail(id),
+    queryKey: [...watchKeys.detail(id), demo],
     queryFn: () => watchService.get(id),
     refetchInterval: (query) => {
       const watch = query.state.data as Watch | undefined;
@@ -40,14 +42,15 @@ export function useWatch(id: string, pollWhilePending = false) {
 
 export function useWatchHistory(id: string, refreshKey?: string) {
   const queryClient = useQueryClient();
+  const demo = useDemoMode();
 
   // Refresh history whenever the latest evaluation changes.
   useEffect(() => {
-    if (refreshKey) queryClient.invalidateQueries({ queryKey: watchKeys.history(id) });
-  }, [refreshKey, id, queryClient]);
+    if (refreshKey) queryClient.invalidateQueries({ queryKey: [...watchKeys.history(id), demo] });
+  }, [refreshKey, id, demo, queryClient]);
 
   return useQuery({
-    queryKey: watchKeys.history(id),
+    queryKey: [...watchKeys.history(id), demo],
     queryFn: () => watchService.history(id),
   });
 }
@@ -78,7 +81,13 @@ export function useRunCheck(id: string) {
 
 /** Re-render helper so components can react to demo-mode toggles. */
 export function useDemoMode() {
-  const [demo, setDemo] = useState(false);
-  useEffect(() => setDemo(isDemoMode()), []);
+  const [demo, setDemo] = useState(isDemoMode);
+
+  useEffect(() => {
+    const handleChange = () => setDemo(isDemoMode());
+    window.addEventListener(DEMO_MODE_CHANGE_EVENT, handleChange);
+    return () => window.removeEventListener(DEMO_MODE_CHANGE_EVENT, handleChange);
+  }, []);
+
   return demo;
 }
