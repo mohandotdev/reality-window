@@ -24,7 +24,7 @@ export function DemoToggle({ className }: { className?: string }) {
           const next = !demo;
           setDemoMode(next);
           setDemo(next);
-          queryClient.clear();
+          queryClient.removeQueries({ queryKey: ["watches"] });
         }}
         className="text-sm text-muted-foreground underline decoration-border-strong underline-offset-4 transition-colors hover:text-accent hover:decoration-accent"
       >
