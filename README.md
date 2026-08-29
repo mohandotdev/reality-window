@@ -37,6 +37,28 @@ Reality Window tracks a belief instead of a URL. You give it a subject, an assum
 
 ---
 
+## How We Select the Source for a Watch
+
+Before creating the collector, Reality Window uses the SERP API to gather candidate resources relevant to the user's subject and assumption.
+
+The source-selection flow is:
+
+1. **SERP discovery**
+   - Reality Window generates search queries from the subject and assumption.
+   - The SERP API gathers candidate resources and returns them with Bright Data's ranking information.
+
+2. **Top-resource selection**
+   - We use the ranking returned by Bright Data to prioritize the strongest candidate resources.
+   - Rather than sending every discovered URL into the collector, Reality Window takes the top-ranked resources as the evidence candidates.
+
+3. **LLM source reasoning**
+   - The top resources are sent to the LLM together with the subject and assumption.
+   - The LLM evaluates which source is the most appropriate and reliable for verifying that specific assumption.
+
+4. **Collector configuration**
+   - The selected source and the evidence requirements are then used to configure the Bright Data Scraper Studio AI Flow collector.
+   - This makes the collector purpose-specific to the assumption instead of simply scraping an arbitrary search result.
+
 ## How We Use Bright Data Scraper Studio
 
 Bright Data Scraper Studio is the acquisition layer at the core of Reality Window.
