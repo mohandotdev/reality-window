@@ -96,17 +96,33 @@ This makes Bright Data a core part of the product's reasoning loop:
 
 ```mermaid
 flowchart TD
-    A[Watch created:\nsubject + assumption + evidence requirements] --> B[Bright Data Scraper Studio AI Flow\nbuilds a purpose-specific collector]
-    B --> C[Collector + AI job ID persisted]
-    C --> D[User reviews and approves\nthe generated collector]
-    D --> E[Run collector]
-    E --> F[Bright Data collects asynchronously]
-    F --> G[Webhook delivers structured result]
-    G --> H[latestData persisted]
-    H --> I[LLM evaluation against the assumption]
-    I --> J{Still supported?}
-    J -->|Yes| K[Still true]
-    J -->|No| L[Finding: decision + reasoning + evidence]
+
+    A["`Make a claim<br/>Subject + assumption<br/>+ evidence requirements`"]
+
+    A --> B["`Find relevant sources<br/>SERP API discovers<br/>candidate resources`"]
+
+    B --> C["`Rank candidates<br/>Bright Data ranking identifies<br/>the strongest sources`"]
+
+    C --> D["`Select the best source<br/>LLM evaluates which source<br/>fits the claim`"]
+
+    D --> E["`Build the collector<br/>Scraper Studio creates<br/>a purpose-specific collector`"]
+
+    E --> F["`Wait for collector readiness<br/>Scraper Studio prepares<br/>the collection workflow`"]
+
+    F --> G["`Collect evidence<br/>Bright Data retrieves<br/>structured data`"]
+
+    G --> H["`Deliver evidence<br/>Webhook sends data<br/>to Reality Window`"]
+
+    H --> I["`Evaluate evidence<br/>LLM compares current data<br/>with the assumption`"]
+
+    I --> J{"`What does the<br/>evidence show?`"}
+
+    J -->|Claim still holds| K["`STILL TRUE<br/>The assumption<br/>remains supported`"]
+
+    J -->|Evidence shows a change| L["`CHANGED<br/>Reality no longer<br/>matches the assumption`"]
+
+    J -->|Evidence is insufficient| M["`NEEDS REVIEW<br/>There is not enough<br/>evidence to decide`"]
+
 ```
 
 Bright Data isn't sitting off to the side producing a feed nobody reads. Its structured collection becomes the evidence the evaluation layer reasons over — take it out and there's nothing to reason about.
