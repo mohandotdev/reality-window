@@ -278,13 +278,13 @@ export class ScraperStudio {
 
     const data = this.normalizeDataset(response);
 
-    const collectionError = this.findCollectionError(data);
+    const collectionError = this.classifyCollectionError(data);
 
     if (collectionError) {
       return {
         collectorId: id,
         status: "COMPLETED",
-        outcome: "SOURCE_UNAVAILABLE",
+        outcome: collectionError.outcome,
         data,
         error: {
           code: collectionError.code,
@@ -481,19 +481,44 @@ export class ScraperStudio {
     }
   }
 
-  private findCollectionError(
-    data: Record<string, unknown>[],
-  ): { code?: string; message?: string } | undefined {
+  private classifyCollectionError(data: Record<string, unknown>[]):
+    | {
+        outcome: "SOURCE_UNAVAILABLE" | "SOURCE_BLOCKED";
+        code?: string;
+        message?: string;
+      }
+    | undefined {
     for (const item of data) {
       const error = item["error"];
       const errorCode = item["error_code"];
 
-      if (typeof error === "string" || typeof errorCode === "string") {
+      if (typeof error !== "string" && typeof errorCode !== "string") {
+        continue;
+      }
+
+      const message = typeof error === "string" ? error : undefined;
+      const code = typeof errorCode === "string" ? errorCode : undefined;
+
+      const normalized = `${code ?? ""} ${message ?? ""}`.toLowerCase();
+
+      if (
+        normalized.includes("blocked") ||
+        normalized.includes("access denied") ||
+        normalized.includes("forbidden") ||
+        normalized.includes("captcha")
+      ) {
         return {
-          code: typeof errorCode === "string" ? errorCode : undefined,
-          message: typeof error === "string" ? error : undefined,
+          outcome: "SOURCE_BLOCKED",
+          code,
+          message,
         };
       }
+
+      return {
+        outcome: "SOURCE_UNAVAILABLE",
+        code,
+        message,
+      };
     }
 
     return undefined;

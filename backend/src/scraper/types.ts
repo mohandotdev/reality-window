@@ -104,6 +104,7 @@ export interface CollectorTriggerResult {
 export type CollectionOutcome =
   | "SUCCESS"
   | "SOURCE_UNAVAILABLE"
+  | "SOURCE_BLOCKED"
   | "NO_USABLE_DATA"
   | "FAILED";
 
