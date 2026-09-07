@@ -101,10 +101,21 @@ export interface CollectorTriggerResult {
   collectionId: string;
 }
 
+export type CollectionOutcome =
+  | "SUCCESS"
+  | "SOURCE_UNAVAILABLE"
+  | "NO_USABLE_DATA"
+  | "FAILED";
+
 export interface CollectorResult {
   collectorId: string;
   status: "COMPLETED" | "FAILED";
+  outcome: CollectionOutcome;
   data: Record<string, unknown>[];
+  error?: {
+    code?: string;
+    message?: string;
+  };
   collectedAt: string;
 }
 
