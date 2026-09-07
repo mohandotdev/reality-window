@@ -276,13 +276,29 @@ export class ScraperStudio {
       },
     });
 
+    const data = this.normalizeDataset(response);
+
+    const collectionError = this.findCollectionError(data);
+
+    if (collectionError) {
+      return {
+        collectorId: id,
+        status: "COMPLETED",
+        outcome: "SOURCE_UNAVAILABLE",
+        data,
+        error: {
+          code: collectionError.code,
+          message: collectionError.message,
+        },
+        collectedAt: new Date().toISOString(),
+      };
+    }
+
     return {
       collectorId: id,
-
       status: "COMPLETED",
-
-      data: this.normalizeDataset(response),
-
+      outcome: "SUCCESS",
+      data,
       collectedAt: new Date().toISOString(),
     };
   }
@@ -463,5 +479,23 @@ export class ScraperStudio {
       default:
         return "CREATED";
     }
+  }
+
+  private findCollectionError(
+    data: Record<string, unknown>[],
+  ): { code?: string; message?: string } | undefined {
+    for (const item of data) {
+      const error = item["error"];
+      const errorCode = item["error_code"];
+
+      if (typeof error === "string" || typeof errorCode === "string") {
+        return {
+          code: typeof errorCode === "string" ? errorCode : undefined,
+          message: typeof error === "string" ? error : undefined,
+        };
+      }
+    }
+
+    return undefined;
   }
 }
