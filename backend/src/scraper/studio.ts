@@ -268,39 +268,52 @@ export class ScraperStudio {
       throw new Error("Collection ID is required.");
     }
 
-    const response = await this.request<unknown>("/dca/dataset", {
-      method: "GET",
+    try {
+      const response = await this.request<unknown>("/dca/dataset", {
+        method: "GET",
 
-      query: {
-        collection_id: id,
-      },
-    });
+        query: {
+          collection_id: id,
+        },
+      });
 
-    const data = this.normalizeDataset(response);
+      const data = this.normalizeDataset(response);
 
-    const collectionError = this.classifyCollectionError(data);
+      const collectionError = this.classifyCollectionError(data);
 
-    if (collectionError) {
+      if (collectionError) {
+        return {
+          collectorId: id,
+          status: "COMPLETED",
+          outcome: collectionError.outcome,
+          data,
+          error: {
+            code: collectionError.code,
+            message: collectionError.message,
+          },
+          collectedAt: new Date().toISOString(),
+        };
+      }
+
       return {
         collectorId: id,
         status: "COMPLETED",
-        outcome: collectionError.outcome,
+        outcome: "SUCCESS",
         data,
+        collectedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        collectorId: id,
+        status: "FAILED",
+        outcome: "FAILED",
+        data: [],
         error: {
-          code: collectionError.code,
-          message: collectionError.message,
+          message: error instanceof Error ? error.message : String(error),
         },
         collectedAt: new Date().toISOString(),
       };
     }
-
-    return {
-      collectorId: id,
-      status: "COMPLETED",
-      outcome: "SUCCESS",
-      data,
-      collectedAt: new Date().toISOString(),
-    };
   }
 
   async runCollector(
