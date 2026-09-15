@@ -5,6 +5,7 @@ import {
   findScraperByCollectorId,
   findScraperByTargetUrl,
 } from "../watches/registry.js";
+import { classifyCollectionError } from "../scraper/collection-outcome.js";
 
 type BrightDataWebhookRecord = Record<string, unknown>;
 
@@ -77,6 +78,22 @@ export async function scraperWebhook(
       });
       return;
     }
+
+    const webhookData = Array.isArray(payload)
+      ? payload.filter(isRecord)
+      : isRecord(payload)
+        ? [payload]
+        : [];
+
+    const collectionError = classifyCollectionError(webhookData);
+
+    console.log("Bright Data collection classification:", {
+      watchId: scraper.watchId,
+      collectorId: scraper.collectorId,
+      outcome: collectionError?.outcome ?? "SUCCESS",
+      code: collectionError?.code,
+      message: collectionError?.message,
+    });
 
     // A Bright Data webhook is the completion signal for the current run.
     // Only a scraper that is currently RUNNING may consume a completion
