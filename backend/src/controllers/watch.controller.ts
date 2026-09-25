@@ -179,7 +179,13 @@ export async function createWatchScraper(
       return;
     }
 
-    const primarySource = sources[0];
+    const primarySource = sources.find(
+      (source)=>
+      typeof source === "object" &&
+      source !== null &&
+      "eligibility" in source &&
+      source.eligibility === "ELIGIBLE"
+      )
 
     if (
       typeof primarySource !== "object" ||
@@ -188,7 +194,7 @@ export async function createWatchScraper(
       typeof primarySource.url !== "string"
     ) {
       res.status(400).json({
-        error: "Primary source URL is missing",
+        error: "No eligible source is available for this watch",
       });
       return;
     }

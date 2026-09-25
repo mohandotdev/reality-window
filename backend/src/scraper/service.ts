@@ -72,6 +72,10 @@ export class ScraperService {
     return this.studio.getDataset(collectionId);
   }
 
+  async getCollectionResult(collectionId: string): Promise<CollectorResult> {
+    return this.studio.getCollectionResult(collectionId);
+  }
+
   private validateTarget(target: ScraperTarget): void {
     if (!target.url.trim()) {
       throw new Error("Scraper target URL is required.");
