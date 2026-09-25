@@ -134,24 +134,22 @@ export async function updateScraperState(
   });
 }
 
-export async function switchScraperSource(
+export async function switchScraperTarget(
   watchId: string,
-  data: {
-    collectorId: string;
-    collectionId: string;
-    target: object;
-  },
+  currentUrl: string,
+  nextTarget: object,
 ) {
-  return prisma.watchScraper.update({
+  return prisma.watchScraper.updateMany({
     where: {
       watchId,
+      status: "RUNNING",
+      target: {
+        path: ["url"],
+        equals: currentUrl,
+      },
     },
     data: {
-      collectorId: data.collectorId,
-      collectionId: data.collectionId,
-      target: data.target,
-      status: "RUNNING",
-      lastRunAt: new Date(),
+      target: nextTarget,
     },
   });
 }
@@ -180,4 +178,15 @@ export async function findScraperEvaluations(scraperId: string) {
 
 export async function findAllWatches() {
   return findAllWatchesRepository();
+}
+
+export async function findScraperByCollectionId(collectionId: string) {
+  return prisma.watchScraper.findFirst({
+    where: {
+      collectionId,
+    },
+    include: {
+      watch: true,
+    },
+  });
 }
