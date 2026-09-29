@@ -415,7 +415,8 @@ export class ScraperStudio {
       };
     } catch (error) {
       console.error(
-        `Failed to resolve Bright Data collection ${collectionId}:`,
+        "Failed to resolve Bright Data collection %s:",
+        collectionId,
         error,
       );
 
