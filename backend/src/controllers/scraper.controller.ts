@@ -1,5 +1,5 @@
 import type { Request, Response } from "express";
-import { Prisma } from "../generated/prisma/client.js";
+import { CollectionOutcome, Prisma } from "../generated/prisma/client.js";
 import { prisma } from "../perisistence/client.js";
 import { createScraperService } from "../scraper/service.js";
 import { classifyCollectionError } from "../scraper/collection-outcome.js";
@@ -332,6 +332,7 @@ export async function scraperWebhook(
           data: {
             status: "UNAVAILABLE",
             lastRunAt: new Date(),
+            collectionOutcome: collectionResult.outcome,
           },
         });
 
@@ -378,6 +379,7 @@ export async function scraperWebhook(
           data: {
             status: "UNAVAILABLE",
             lastRunAt: new Date(),
+            collectionOutcome: collectionResult.outcome,
           },
         });
 
@@ -495,6 +497,7 @@ export async function scraperWebhook(
           data: {
             status: "FAILED",
             lastRunAt: new Date(),
+            collectionOutcome: collectionResult.outcome,
           },
         });
 
@@ -619,6 +622,7 @@ export async function scraperWebhook(
         },
         data: {
           status: "COMPLETED",
+          collectionOutcome: collectionResult.outcome,
           lastRunAt: new Date(),
           latestData: collectionResult.data as Prisma.InputJsonValue,
         },

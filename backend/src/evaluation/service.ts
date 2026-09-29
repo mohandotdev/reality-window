@@ -61,15 +61,6 @@ export async function evaluateScraper(
     throw new Error("No latest scraper data is available for evaluation.");
   }
 
-  const previousEvaluation = await prisma.scraperEvaluation.findFirst({
-    where: {
-      scraperId: watch.scraper.id,
-    },
-    orderBy: {
-      createdAt: "desc",
-    },
-  });
-
   const evidenceRequirements = Array.isArray(watch.evidenceRequirements)
     ? watch.evidenceRequirements.filter(
         (value): value is string => typeof value === "string",
@@ -78,9 +69,49 @@ export async function evaluateScraper(
 
   const latestData = normalizeLatestData(watch.scraper.latestData);
 
+  if (watch.scraper.collectionOutcome === "NO_USABLE_DATA") {
+    const evaluation = await prisma.scraperEvaluation.create({
+      data: {
+        scraperId: watch.scraper.id,
+        collectionId: watch.scraper.collectionId,
+
+        verdict: "UNCERTAIN",
+        confidence: 0,
+        reasoning:
+          "The collection completed successfully, but no usable evidence was available to evaluate the assumption.",
+
+        evidence: [],
+        changedFields: [],
+      },
+    });
+
+    return {
+      id: evaluation.id,
+      scraperId: evaluation.scraperId,
+      collectionId: evaluation.collectionId,
+      createdAt: evaluation.createdAt,
+
+      verdict: evaluation.verdict,
+      confidence: evaluation.confidence,
+      reasoning: evaluation.reasoning,
+
+      evidence: [],
+      changedFields: [],
+    };
+  }
+
   if (latestData.length === 0) {
     throw new Error("Latest scraper data does not contain evaluable records.");
   }
+
+  const previousEvaluation = await prisma.scraperEvaluation.findFirst({
+    where: {
+      scraperId: watch.scraper.id,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
 
   const result = await llmService.evaluate({
     subject: watch.subject,
