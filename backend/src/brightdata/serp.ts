@@ -85,15 +85,19 @@ export interface BrightDataSerpResult {
 /**
  * Source returned to the rest of the application.
  */
+export type SourceType = "government" | "forum" | "social" | "unknown";
+
+export type SourceEligibility = "ELIGIBLE" | "EXCLUDED";
+
 export interface CleanSource {
   title: string;
   url: string;
   snippet: string;
   domain: string;
   sourceType: SourceType;
+  eligibility: SourceEligibility;
+  exclusionReason?: string;
 }
-
-export type SourceType = "government" | "forum" | "social" | "unknown";
 
 /* -------------------------------------------------------------------------- */
 /* Restricted domains                                                        */
@@ -411,21 +415,6 @@ export function cleanSources(
 
     const sourceType = getSourceType(domain);
 
-    /* -------------------------- Restriction step ------------------------- */
-
-    if (isRestrictedDomain(domain)) {
-      const reason = isGovernmentDomain(domain)
-        ? "restricted-government-domain"
-        : `restricted-domain:${domain}`;
-
-      console.log(
-        `Restricted source removed: ${item.link} ` +
-          `(type=${sourceType}, reason=${reason})`,
-      );
-
-      continue;
-    }
-
     /* -------------------------- URL normalization ------------------------ */
 
     const normalizedUrl = normalizeUrl(item.link);
@@ -442,12 +431,38 @@ export function cleanSources(
 
     const snippet = cleanSnippet(item.description ?? item.snippet ?? "");
 
+    /* -------------------------- Restriction step ------------------------- */
+
+    if (isRestrictedDomain(domain)) {
+      const reason = isGovernmentDomain(domain)
+        ? "restricted-government-domain"
+        : `restricted-domain:${domain}`;
+
+      console.log(
+        `Restricted source removed: ${item.link} ` +
+          `(type=${sourceType}, reason=${reason})`,
+      );
+
+      cleaned.push({
+        title: item.title ?? "",
+        url: normalizedUrl,
+        snippet,
+        domain,
+        sourceType,
+        eligibility: "EXCLUDED",
+        exclusionReason: reason,
+      });
+
+      continue;
+    }
+
     cleaned.push({
       title: item.title ?? "",
       url: normalizedUrl,
       snippet,
       domain,
       sourceType,
+      eligibility: "ELIGIBLE",
     });
   }
 

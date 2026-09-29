@@ -91,6 +91,9 @@ export async function findScraperByCollectorId(collectorId: string) {
     where: {
       collectorId,
     },
+    include: {
+      watch: true,
+    },
   });
 }
 
@@ -106,6 +109,9 @@ export async function findScraperByTargetUrl(targetUrl: string) {
         path: ["url"],
         equals: targetUrl,
       },
+    },
+    include: {
+      watch: true,
     },
   });
 
@@ -125,6 +131,26 @@ export async function updateScraperState(
       watchId,
     },
     data,
+  });
+}
+
+export async function switchScraperTarget(
+  watchId: string,
+  currentUrl: string,
+  nextTarget: object,
+) {
+  return prisma.watchScraper.updateMany({
+    where: {
+      watchId,
+      status: "RUNNING",
+      target: {
+        path: ["url"],
+        equals: currentUrl,
+      },
+    },
+    data: {
+      target: nextTarget,
+    },
   });
 }
 
@@ -152,4 +178,15 @@ export async function findScraperEvaluations(scraperId: string) {
 
 export async function findAllWatches() {
   return findAllWatchesRepository();
+}
+
+export async function findScraperByCollectionId(collectionId: string) {
+  return prisma.watchScraper.findFirst({
+    where: {
+      collectionId,
+    },
+    include: {
+      watch: true,
+    },
+  });
 }

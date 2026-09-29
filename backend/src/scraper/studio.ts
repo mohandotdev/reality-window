@@ -9,6 +9,7 @@ import type {
   ScraperSchema,
   ScraperTarget,
 } from "./types.js";
+import { classifyCollectionError } from "./collection-outcome.js";
 
 interface BrightDataCollectorResponse {
   id?: string;
@@ -40,6 +41,28 @@ interface BrightDataTriggerResponse {
   collectionId?: string;
   status?: string;
   [key: string]: unknown;
+}
+
+interface BrightDataJobLog {
+  id: string;
+  status: string;
+  collector?: string;
+  template?: string;
+  inputs?: number;
+  dup_inputs?: number;
+  lines?: number;
+  fails?: number;
+  pages?: number;
+  pages_left?: number;
+  success?: number;
+  navigations?: number;
+  created?: string;
+  started?: string;
+  finished?: string;
+  trigger?: string;
+  success_rate?: number;
+  job_time?: number;
+  queue_time?: number;
 }
 
 export interface TriggerCollectorResult {
@@ -268,23 +291,146 @@ export class ScraperStudio {
       throw new Error("Collection ID is required.");
     }
 
-    const response = await this.request<unknown>("/dca/dataset", {
-      method: "GET",
+    try {
+      const response = await this.request<unknown>("/dca/dataset", {
+        method: "GET",
 
-      query: {
-        collection_id: id,
-      },
-    });
+        query: {
+          id,
+        },
+      });
 
-    return {
-      collectorId: id,
+      const data = this.normalizeDataset(response);
 
-      status: "COMPLETED",
+      const collectionError = classifyCollectionError(data);
 
-      data: this.normalizeDataset(response),
+      if (collectionError) {
+        return {
+          collectorId: id,
+          status: "COMPLETED",
+          outcome: collectionError.outcome,
+          data,
+          error: {
+            code: collectionError.code,
+            message: collectionError.message,
+          },
+          collectedAt: new Date().toISOString(),
+        };
+      }
 
-      collectedAt: new Date().toISOString(),
-    };
+      return {
+        collectorId: id,
+        status: "COMPLETED",
+        outcome: "SUCCESS",
+        data,
+        collectedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        collectorId: id,
+        status: "FAILED",
+        outcome: "FAILED",
+        data: [],
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+        collectedAt: new Date().toISOString(),
+      };
+    }
+  }
+
+  async getCollectionResult(collectionId: string): Promise<CollectorResult> {
+    try {
+      const dataset = await this.getDataset(collectionId);
+
+      /*
+       * If the dataset already contains an explicit collection
+       * error, preserve the existing classification.
+       */
+      const collectionError = classifyCollectionError(dataset.data);
+
+      if (collectionError) {
+        return {
+          collectorId: dataset.collectorId,
+          status: "FAILED",
+          outcome: collectionError.outcome,
+          data: dataset.data,
+          error: {
+            code: collectionError.code,
+            message: collectionError.message,
+          },
+          collectedAt: new Date().toISOString(),
+        };
+      }
+
+      /*
+       * Bright Data can return an empty dataset for a failed crawl.
+       *
+       * The dataset itself cannot distinguish:
+       *
+       *   [] + successful run
+       *   [] + failed crawl
+       *
+       * Therefore inspect the job metadata.
+       */
+      if (dataset.data.length === 0) {
+        const jobLog = await this.getJobLog(collectionId);
+
+        const failedInputs =
+          typeof jobLog.fails === "number" ? jobLog.fails : 0;
+
+        if (failedInputs > 0) {
+          return {
+            collectorId: dataset.collectorId,
+            status: "FAILED",
+            outcome: "SOURCE_UNAVAILABLE",
+            data: [],
+            error: {
+              message:
+                `Bright Data collection failed for ` +
+                `${failedInputs} input(s).`,
+            },
+            collectedAt: new Date().toISOString(),
+          };
+        }
+
+        return {
+          collectorId: dataset.collectorId,
+          status: "COMPLETED",
+          outcome: "NO_USABLE_DATA",
+          data: [],
+          collectedAt: new Date().toISOString(),
+        };
+      }
+
+      /*
+       * Dataset contains usable records.
+       */
+      return {
+        collectorId: dataset.collectorId,
+        status: "COMPLETED",
+        outcome: "SUCCESS",
+        data: dataset.data,
+        collectedAt: new Date().toISOString(),
+      };
+    } catch (error) {
+      console.error(
+        "Failed to resolve Bright Data collection %s:",
+        collectionId,
+        error,
+      );
+
+      return {
+        collectorId: "",
+        status: "FAILED",
+        outcome: "FAILED",
+        data: [],
+        error: {
+          message: error instanceof Error ? error.message : String(error),
+        },
+        collectedAt: new Date().toISOString(),
+      };
+    }
   }
 
   async runCollector(
@@ -463,5 +609,16 @@ export class ScraperStudio {
       default:
         return "CREATED";
     }
+  }
+
+  private async getJobLog(collectionId: string): Promise<BrightDataJobLog> {
+    const response = await this.request<BrightDataJobLog>(
+      `/dca/log/${encodeURIComponent(collectionId)}`,
+      {
+        method: "GET",
+      },
+    );
+
+    return response;
   }
 }

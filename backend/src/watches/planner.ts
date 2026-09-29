@@ -1,6 +1,7 @@
 import type { CreateWatchRequest, WatchPlan } from "./types.js";
 import { searchGoogleSources } from "../brightdata/serp.js";
 import { createLlmService } from "../llm/service.js";
+import { title } from "process";
 
 export async function createWatchPlan(
   request: CreateWatchRequest,
@@ -24,15 +25,23 @@ export async function createWatchPlan(
   // ---------------------------------
   const sourcesStarted = Date.now();
 
-  const sources = await searchGoogleSources(searchQueries, 10);
+  const cleanedSources = await searchGoogleSources(searchQueries, 10);
 
   console.log(`SERP + cleanup: ${Date.now() - sourcesStarted}ms`);
 
-  if (sources.length === 0) {
+  if (cleanedSources.length === 0) {
     throw new Error(
       "Unable to create watch plan: no usable sources were found.",
     );
   }
+
+  const sources = cleanedSources.map((source) => ({
+    title: source.title,
+    url: source.url,
+    snippet: source.snippet,
+    eligibility: source.eligibility,
+    exclusionReason: source.exclusionReason,
+  }));
 
   // --------------------------------
   // Phase 3: LLM reasoning

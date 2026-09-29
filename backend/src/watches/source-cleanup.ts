@@ -6,12 +6,16 @@ export interface RawSource {
   snippet: string;
 }
 
+export type SourceEligibility = "ELIGIBILE" | "EXCLUDED";
+
 export interface CleanSource {
   title: string;
   url: string;
   snippet: string;
   domain: string;
   sourceType: SourceType;
+  eligibility: SourceEligibility;
+  exclusionReason?: string;
 }
 
 function normalizeUrl(value: string): string | null {
@@ -68,6 +72,16 @@ export function cleanupSources(sources: RawSource[]): CleanSource[] {
           `reason=${classification.restrictionReason})`,
       );
 
+      cleanSources.push({
+        title: source.title.trim(),
+        url: normalizedUrl,
+        snippet: cleanSnippet(source.snippet),
+        domain: hostname,
+        sourceType: classification.sourceType,
+        eligibility: "EXCLUDED",
+        exclusionReason: classification.restrictionReason,
+      });
+
       continue;
     }
 
@@ -77,6 +91,7 @@ export function cleanupSources(sources: RawSource[]): CleanSource[] {
       snippet: cleanSnippet(source.snippet),
       domain: hostname,
       sourceType: classification.sourceType,
+      eligibility: "ELIGIBILE",
     });
   }
 
